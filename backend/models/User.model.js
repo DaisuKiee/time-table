@@ -1,0 +1,178 @@
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
+
+const UserSchema = new mongoose.Schema({
+  email: {
+    type: String,
+    required: [true, 'Email is required'],
+    unique: true,
+    lowercase: true,
+    trim: true,
+    match: [/^\S+@\S+\.\S+$/, 'Please provide a valid email']
+  },
+  password: {
+    type: String,
+    required: [true, 'Password is required'],
+    minlength: [6, 'Password must be at least 6 characters'],
+    select: false
+  },
+  role: {
+    type: String,
+    enum: ['admin', 'scheduling_officer', 'program_manager', 'faculty', 'student'],
+    default: 'student',
+    required: true
+  },
+  firstName: {
+    type: String,
+    required: [true, 'First name is required'],
+    trim: true
+  },
+  lastName: {
+    type: String,
+    required: [true, 'Last name is required'],
+    trim: true
+  },
+  middleName: {
+    type: String,
+    trim: true
+  },
+  profilePicture: {
+    type: String,
+    default: null
+  },
+  phoneNumber: {
+    type: String,
+    trim: true
+  },
+  address: {
+    type: String,
+    trim: true
+  },
+  bio: {
+    type: String,
+    trim: true,
+    maxlength: 500
+  },
+  studentId: {
+    type: String,
+    trim: true,
+    sparse: true // Allows null but unique if present
+  },
+  program: {
+    type: String,
+    enum: ['BSIT', 'BSHM', 'BIT-ET', 'BIT-CT', 'BIT-AT', 'BSFI', 'BSIE', null],
+    default: null,
+    validate: {
+      validator: function(value) {
+        // If role is program_manager, program is required
+        if (this.role === 'program_manager') {
+          return value !== null && value !== undefined;
+        }
+        return true;
+      },
+      message: 'Program is required for program managers'
+    }
+  },
+  yearLevel: {
+    type: Number,
+    min: 1,
+    max: 4,
+    default: null
+  },
+  section: {
+    type: String,
+    trim: true
+  },
+  shift: {
+    type: String,
+    enum: ['Day', 'Night', null],
+    default: null
+  },
+  isActive: {
+    type: Boolean,
+    default: true
+  },
+  facultyProfile: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Faculty',
+    default: null
+  },
+  lastLogin: {
+    type: Date,
+    default: null
+  },
+  // Email verification fields
+  isEmailVerified: {
+    type: Boolean,
+    default: false
+  },
+  emailVerificationToken: {
+    type: String,
+    default: null
+  },
+  emailVerificationExpires: {
+    type: Date,
+    default: null
+  },
+  passwordResetToken: {
+    type: String,
+    default: null
+  },
+  passwordResetExpires: {
+    type: Date,
+    default: null
+  },
+  // Settings fields
+  settings: {
+    notifications: {
+      emailNotifications: { type: Boolean, default: true },
+      scheduleUpdates: { type: Boolean, default: true },
+      facultyAssignments: { type: Boolean, default: true },
+      systemAlerts: { type: Boolean, default: true },
+      weeklyDigest: { type: Boolean, default: false }
+    },
+    appearance: {
+      theme: { type: String, enum: ['light', 'dark', 'system'], default: 'light' },
+      language: { type: String, enum: ['en', 'fil', 'ceb'], default: 'en' },
+      timezone: { type: String, default: 'Asia/Manila' }
+    },
+    privacy: {
+      profileVisibility: { type: String, enum: ['public', 'program-only', 'private'], default: 'public' },
+      showEmail: { type: Boolean, default: false },
+      showPhone: { type: Boolean, default: false },
+      allowMessages: { type: Boolean, default: true }
+    }
+  }
+}, {
+  timestamps: true
+});
+
+// Hash password before saving
+UserSchema.pre('save', async function(next) {
+  if (!this.isModified('password')) {
+    return next();
+  }
+  
+  const salt = await bcrypt.genSalt(10);
+  this.password = await bcrypt.hash(this.password, salt);
+  next();
+});
+
+// Method to compare passwords
+UserSchema.methods.comparePassword = async function(candidatePassword) {
+  return await bcrypt.compare(candidatePassword, this.password);
+};
+
+// Virtual for full name
+UserSchema.virtual('fullName').get(function() {
+  if (this.middleName) {
+    return `${this.firstName} ${this.middleName} ${this.lastName}`;
+  }
+  return `${this.firstName} ${this.lastName}`;
+});
+
+// Ensure virtuals are included in JSON
+UserSchema.set('toJSON', { virtuals: true });
+UserSchema.set('toObject', { virtuals: true });
+
+module.exports = mongoose.model('User', UserSchema);

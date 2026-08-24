@@ -1,0 +1,97 @@
+const mongoose = require('mongoose');
+
+const StudentSchema = new mongoose.Schema({
+  user: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+    unique: true
+  },
+  studentId: {
+    type: String,
+    required: [true, 'Student ID is required'],
+    unique: true,
+    trim: true
+  },
+  program: {
+    type: String,
+    required: [true, 'Program is required'],
+    enum: ['BSIT', 'BSHM', 'BIT-ET', 'BIT-CT', 'BIT-AT', 'BSFI', 'BSIE']
+  },
+  yearLevel: {
+    type: Number,
+    required: [true, 'Year level is required'],
+    min: 1,
+    max: 4
+  },
+  section: {
+    type: String,
+    required: [true, 'Section is required'],
+    trim: true
+  },
+  studentType: {
+    type: String,
+    enum: ['regular', 'irregular'],
+    default: 'regular'
+  },
+  academicYear: {
+    type: String,
+    required: true,
+    default: '2024-2025'
+  },
+  semester: {
+    type: Number,
+    required: true,
+    enum: [1, 2],
+    default: 1
+  },
+  enrolledClasses: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ClassSpace'
+  }],
+  contactNumber: {
+    type: String,
+    trim: true
+  },
+  address: {
+    street: String,
+    barangay: String,
+    city: String,
+    province: String,
+    zipCode: String
+  },
+  guardianInfo: {
+    name: String,
+    relationship: String,
+    contactNumber: String
+  },
+  emergencyContact: {
+    name: String,
+    relationship: String,
+    contactNumber: String
+  },
+  enrollmentStatus: {
+    type: String,
+    enum: ['enrolled', 'not_enrolled', 'dropped', 'graduated'],
+    default: 'not_enrolled'
+  },
+  gpa: {
+    type: Number,
+    min: 0,
+    max: 5,
+    default: null
+  },
+  notes: {
+    type: String,
+    trim: true
+  }
+}, {
+  timestamps: true
+});
+
+// Index for faster queries
+StudentSchema.index({ studentId: 1 });
+StudentSchema.index({ program: 1, yearLevel: 1, section: 1 });
+StudentSchema.index({ user: 1 });
+
+module.exports = mongoose.model('Student', StudentSchema);
