@@ -1,0 +1,75 @@
+# Dependencies
+node_modules
+npm-debug.log
+yarn-error.log
+
+# Environment files (use Vercel env vars instead)
+.env
+.env.local
+.env.development
+.env.production
+
+# Build outputs (will be rebuilt on Vercel)
+frontend/build
+backend/dist
+
+# Testing
+coverage
+.nyc_output
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+venv
+env
+
+# Documentation
+*.md
+*.doc
+*.docx
+*.pdf
+*.txt
+
+# Data files
+*.xlsx
+*.xlsm
+*.xls
+*.csv
+
+# Batch files
+*.bat
+
+# Git
+.git
+.gitignore
+
+# Logs
+*.log
+logs
+
+# Temporary files
+*.tmp
+temp
+tmp
+
+# Database
+*.db
+*.sqlite
+
+# Kiro
+.kiro
+
+# Python scripts (not needed for production)
+*.py
+backend/python/requirements.txt
