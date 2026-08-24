@@ -13,8 +13,32 @@ app.use(helmet());
 
 // CORS configuration
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true
+  origin: function(origin, callback) {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+    
+    // Get frontend URL and normalize it (remove trailing slash)
+    const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
+    const normalizedOrigin = origin.replace(/\/$/, '');
+    
+    // Allow the frontend URL and localhost
+    const allowedOrigins = [
+      frontendUrl,
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'https://time-table-ivory.vercel.app',
+      'https://technotabler.cebutech.digital'
+    ];
+    
+    if (allowedOrigins.includes(normalizedOrigin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // Rate limiting - More lenient for development
@@ -38,7 +62,8 @@ app.use(express.urlencoded({ extended: true }));
 
 // Serve static files from uploads folder with CORS headers
 app.use('/uploads', (req, res, next) => {
-  res.header('Access-Control-Allow-Origin', process.env.FRONTEND_URL || 'http://localhost:3000');
+  const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
+  res.header('Access-Control-Allow-Origin', frontendUrl);
   res.header('Access-Control-Allow-Methods', 'GET');
   res.header('Access-Control-Allow-Headers', 'Content-Type');
   res.header('Cross-Origin-Resource-Policy', 'cross-origin');
