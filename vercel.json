@@ -1,6 +1,7 @@
 {
+  "framework": "create-react-app",
   "buildCommand": "cd frontend && npm install && npm run build",
   "outputDirectory": "frontend/build",
-  "framework": "create-react-app",
-  "installCommand": "cd frontend && npm install"
+  "installCommand": "cd frontend && npm install",
+  "devCommand": "cd frontend && npm start"
 }

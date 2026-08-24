@@ -73,3 +73,6 @@ tmp
 # Python scripts (not needed for production)
 *.py
 backend/python/requirements.txt
+
+# IGNORE ENTIRE BACKEND FOLDER FOR VERCEL (frontend-only deployment)
+backend/
