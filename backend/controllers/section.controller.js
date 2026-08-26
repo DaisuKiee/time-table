@@ -1,4 +1,16 @@
 const Section = require('../models/Section.model');
+const ClassSpace = require('../models/ClassSpace.model');
+
+// Helper: generate a unique enrollment code for a ClassSpace
+const generateUniqueEnrollmentCode = async () => {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let code, exists;
+  do {
+    code = Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    exists = await ClassSpace.findOne({ enrollmentCode: code });
+  } while (exists);
+  return code;
+};
 
 // @desc    Get all sections
 // @route   GET /api/sections
@@ -96,7 +108,10 @@ exports.createSection = async (req, res) => {
       });
     }
 
-    const section = await Section.create({
+    // Generate unique enrollment code
+    let enrollmentCode;
+    let isUnique = false;
+    const section = new Section({
       sectionCode,
       program,
       yearLevel,
@@ -105,9 +120,34 @@ exports.createSection = async (req, res) => {
       academicYear,
       semester,
       maxStudents: maxStudents || 40,
-      adviser: adviser || null,
+      adviser: adviser && adviser !== '' ? adviser : null,
       description: description || ''
     });
+
+    // Keep generating until we get a unique code
+    while (!isUnique) {
+      enrollmentCode = section.generateEnrollmentCode();
+      const existing = await Section.findOne({ enrollmentCode });
+      if (!existing) {
+        isUnique = true;
+      }
+    }
+
+    section.enrollmentCode = enrollmentCode;
+    await section.save();
+
+    // Auto-create a ClassSpace for this section so students can enroll immediately
+    const existingCS = await ClassSpace.findOne({ sectionCode });
+    if (!existingCS) {
+      await ClassSpace.create({
+        sectionCode,
+        enrollmentCode,
+        announcements: [],
+        materials: [],
+        enrolledStudents: [],
+        isActive: true
+      });
+    }
 
     const populatedSection = await Section.findById(section._id)
       .populate('adviser', 'employeeId user')
@@ -126,6 +166,12 @@ exports.createSection = async (req, res) => {
     });
   } catch (error) {
     console.error('Create section error:', error);
+    console.error('Error stack:', error.stack);
+    console.error('Error details:', {
+      message: error.message,
+      name: error.name,
+      code: error.code
+    });
     res.status(500).json({
       success: false,
       message: 'Error creating section',
@@ -158,7 +204,7 @@ exports.updateSection = async (req, res) => {
     if (academicYear) section.academicYear = academicYear;
     if (semester) section.semester = semester;
     if (maxStudents !== undefined) section.maxStudents = maxStudents;
-    if (adviser !== undefined) section.adviser = adviser;
+    if (adviser !== undefined) section.adviser = adviser && adviser !== '' ? adviser : null;
     if (description !== undefined) section.description = description;
     if (isActive !== undefined) section.isActive = isActive;
     if (currentStudents !== undefined) section.currentStudents = currentStudents;
@@ -306,6 +352,63 @@ exports.getSectionStats = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error fetching section statistics',
+      error: error.message
+    });
+  }
+};
+
+// @desc    Regenerate enrollment code for a section
+// @route   PUT /api/sections/:id/regenerate-code
+// @access  Private (Admin, Scheduling Officer, Program Manager)
+exports.regenerateEnrollmentCode = async (req, res) => {
+  try {
+    const section = await Section.findById(req.params.id);
+
+    if (!section) {
+      return res.status(404).json({
+        success: false,
+        message: 'Section not found'
+      });
+    }
+
+    // Generate new unique enrollment code
+    let enrollmentCode;
+    let isUnique = false;
+
+    while (!isUnique) {
+      enrollmentCode = section.generateEnrollmentCode();
+      const existing = await Section.findOne({ 
+        enrollmentCode,
+        _id: { $ne: section._id }
+      });
+      if (!existing) {
+        isUnique = true;
+      }
+    }
+
+    section.enrollmentCode = enrollmentCode;
+    await section.save();
+
+    const updatedSection = await Section.findById(section._id)
+      .populate('adviser', 'employeeId user')
+      .populate({
+        path: 'adviser',
+        populate: {
+          path: 'user',
+          select: 'firstName lastName email'
+        }
+      });
+
+    res.status(200).json({
+      success: true,
+      message: 'Enrollment code regenerated successfully',
+      data: updatedSection
+    });
+  } catch (error) {
+    console.error('Regenerate enrollment code error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error regenerating enrollment code',
       error: error.message
     });
   }

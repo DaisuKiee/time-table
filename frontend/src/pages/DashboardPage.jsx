@@ -5,7 +5,7 @@ import {
   Users, BookOpen, DoorOpen, Calendar, 
   TrendingUp, Clock, CheckCircle, AlertTriangle,
   RefreshCw, Info, UserCheck, UserX, FileClock,
-  Banknote, Wallet, TrendingDown, Bell
+  Banknote, Wallet, TrendingDown, Bell, GraduationCap
 } from 'lucide-react';
 import { facultyAPI, subjectAPI, roomAPI, scheduleAPI, classSpaceAPI, userAPI, studentAPI } from '../services/api';
 import toast from 'react-hot-toast';
@@ -774,3 +774,216 @@ const DashboardPage = () => {
 };
 
 export default DashboardPage;
+
+
+// Student Dashboard Component
+const StudentDashboard = ({ user, loading: parentLoading }) => {
+  const [studentData, setStudentData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [schedules, setSchedules] = useState([]);
+
+  useEffect(() => {
+    loadStudentData();
+  }, []);
+
+  const loadStudentData = async () => {
+    try {
+      // Fetch student record
+      const studentRes = await studentAPI.getAll();
+      const allStudents = studentRes.data.data || [];
+      const myStudentRecord = allStudents.find(s => s.user?._id === user?._id || s.user === user?._id);
+      
+      setStudentData(myStudentRecord);
+
+      // Fetch schedules if student has section or subjects
+      if (myStudentRecord) {
+        const scheduleRes = await scheduleAPI.getAll();
+        const allSchedules = scheduleRes.data.data || [];
+        
+        let mySchedules = [];
+        if (myStudentRecord.studentType === 'regular' && myStudentRecord.sectionCode) {
+          // Regular student: filter by section code
+          mySchedules = allSchedules.filter(s => s.section === myStudentRecord.sectionCode);
+        } else if (myStudentRecord.studentType === 'irregular' && myStudentRecord.subjectCodes?.length > 0) {
+          // Irregular student: filter by subject codes
+          mySchedules = allSchedules.filter(s => 
+            myStudentRecord.subjectCodes.includes(s.subject?.subjectCode || s.subject)
+          );
+        }
+        
+        setSchedules(mySchedules);
+      }
+    } catch (error) {
+      console.error('Failed to load student data:', error);
+      toast.error('Failed to load your enrollment information');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading || parentLoading) {
+    return (
+      <div className="space-y-6 animate-pulse">
+        <div className="bg-gray-200 rounded-lg h-48"></div>
+        <div className="bg-gray-200 rounded-lg h-64"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Enrollment Card */}
+      <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl shadow-lg p-6 text-white">
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <h2 className="text-2xl font-bold mb-1">Welcome back, {user?.firstName}!</h2>
+            <p className="text-blue-100 text-sm">Student ID: {user?.studentId}</p>
+          </div>
+          <div className="p-3 bg-white/20 backdrop-blur-sm rounded-lg">
+            <GraduationCap className="w-8 h-8" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+          <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
+            <p className="text-blue-100 text-sm mb-1">Program</p>
+            <p className="text-xl font-semibold">{user?.program || studentData?.program || 'Not assigned'}</p>
+          </div>
+          
+          <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
+            <p className="text-blue-100 text-sm mb-1">Student Type</p>
+            <p className="text-xl font-semibold capitalize">{studentData?.studentType || 'Not assigned'}</p>
+          </div>
+
+          <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
+            <p className="text-blue-100 text-sm mb-1">
+              {studentData?.studentType === 'regular' ? 'Section' : 'Subjects Enrolled'}
+            </p>
+            <p className="text-xl font-semibold">
+              {studentData?.studentType === 'regular' 
+                ? (studentData?.sectionCode || 'Not assigned')
+                : (studentData?.subjectCodes?.length || 0) + ' subjects'
+              }
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Enrollment Details */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 dark:bg-gray-800 dark:border-gray-700">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4 dark:text-gray-100">
+          Enrollment Information
+        </h3>
+        
+        {!studentData ? (
+          <div className="text-center py-8 text-gray-500">
+            <Users className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+            <p>No enrollment record found</p>
+            <p className="text-sm mt-1">Please contact your program manager</p>
+          </div>
+        ) : studentData.studentType === 'regular' && !studentData.sectionCode ? (
+          <div className="text-center py-8 text-orange-600 bg-orange-50 rounded-lg">
+            <AlertTriangle className="w-12 h-12 mx-auto mb-2" />
+            <p className="font-medium">Section Not Assigned</p>
+            <p className="text-sm mt-1">Your program manager will assign you to a section soon</p>
+          </div>
+        ) : studentData.studentType === 'irregular' && (!studentData.subjectCodes || studentData.subjectCodes.length === 0) ? (
+          <div className="text-center py-8 text-orange-600 bg-orange-50 rounded-lg">
+            <AlertTriangle className="w-12 h-12 mx-auto mb-2" />
+            <p className="font-medium">No Subjects Enrolled</p>
+            <p className="text-sm mt-1">Your program manager will assign your subjects soon</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Academic Year</p>
+                <p className="font-medium text-gray-900 dark:text-gray-100">{studentData.academicYear}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Semester</p>
+                <p className="font-medium text-gray-900 dark:text-gray-100">
+                  {studentData.semester === 1 ? '1st Semester' : '2nd Semester'}
+                </p>
+              </div>
+            </div>
+
+            {studentData.studentType === 'irregular' && studentData.subjectCodes?.length > 0 && (
+              <div>
+                <p className="text-sm text-gray-600 mb-2 dark:text-gray-400">Enrolled Subjects:</p>
+                <div className="flex flex-wrap gap-2">
+                  {studentData.subjectCodes.map((code, index) => (
+                    <span
+                      key={index}
+                      className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium dark:bg-blue-900 dark:text-blue-300"
+                    >
+                      {code}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+              <p className="text-sm text-gray-600 dark:text-gray-400">Enrollment Status</p>
+              <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium mt-1 ${
+                studentData.enrollmentStatus === 'enrolled' 
+                  ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                  : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+              }`}>
+                <CheckCircle className="w-4 h-4" />
+                {studentData.enrollmentStatus}
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Schedule Card */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 dark:bg-gray-800 dark:border-gray-700">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            My Class Schedule
+          </h3>
+          <button
+            onClick={() => window.location.href = '/schedules'}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+          >
+            View Full Schedule
+          </button>
+        </div>
+
+        {schedules.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            <Calendar className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+            <p>No schedule available yet</p>
+            <p className="text-sm mt-1">Check back later for your class schedule</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              You have {schedules.length} scheduled {schedules.length === 1 ? 'class' : 'classes'}
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+              {schedules.slice(0, 4).map((schedule, index) => (
+                <div key={index} className="p-3 bg-gray-50 rounded-lg border border-gray-200 dark:bg-gray-700 dark:border-gray-600">
+                  <p className="font-medium text-gray-900 dark:text-gray-100">
+                    {typeof schedule.subject === 'object' ? schedule.subject.subjectName : schedule.subject}
+                  </p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    {schedule.day} • {schedule.timeSlot}
+                  </p>
+                </div>
+              ))}
+            </div>
+            {schedules.length > 4 && (
+              <p className="text-sm text-gray-500 text-center mt-3 dark:text-gray-400">
+                +{schedules.length - 4} more {schedules.length - 4 === 1 ? 'class' : 'classes'}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};

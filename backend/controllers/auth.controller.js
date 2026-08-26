@@ -454,9 +454,7 @@ exports.signup = async (req, res) => {
       firstName, 
       lastName, 
       studentId,
-      program,
-      yearLevel,
-      section 
+      program
     } = req.body;
 
     // Check if user already exists
@@ -493,25 +491,24 @@ exports.signup = async (req, res) => {
       lastName,
       studentId,
       program,
-      yearLevel: parseInt(yearLevel),
-      section,
       isEmailVerified: false,
       emailVerificationToken: verificationToken,
       emailVerificationExpires: tokenExpiry
     });
 
     // Create corresponding Student record for Student Management page
+    // Student will be assigned to section later by program manager
     const Student = require('../models/Student.model');
     await Student.create({
       user: user._id,
       studentId: studentId,
       program: program,
-      yearLevel: parseInt(yearLevel),
-      section: section,
-      studentType: 'regular',
+      studentType: 'regular', // Default to regular, can be changed by manager
       academicYear: '2024-2025',
       semester: 1,
-      enrollmentStatus: 'enrolled'
+      enrollmentStatus: 'not_enrolled', // Changed from 'enrolled' - will be enrolled when assigned to section
+      sectionCode: null, // Will be assigned by program manager
+      subjectCodes: [] // Empty for regular students, filled for irregular students
     });
 
     // Send verification email

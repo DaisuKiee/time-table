@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { scheduleAPI } from '../services/api';
+import React, { useState, useCallback, useEffect } from 'react';
+import { scheduleAPI, sectionAPI } from '../services/api';
 import toast from 'react-hot-toast';
-import { X, Wand2, Loader, CheckCircle, AlertTriangle, Calendar } from 'lucide-react';
+import { X, Wand2, Loader, CheckCircle, AlertTriangle, Calendar, Sparkles } from 'lucide-react';
 
 const PROGRAMS = ['BSIT', 'BSHM', 'BIT-ET', 'BIT-CT', 'BIT-AT', 'BSFI', 'BSIE'];
 const YEAR_LEVELS = [1, 2, 3, 4];
@@ -10,23 +10,49 @@ const SEMESTERS = [1, 2];
 const GenerateScheduleModal = ({ onClose }) => {
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [generationResult, setGenerationResult] = useState(null);
+  const [previewData, setPreviewData] = useState(null);
+  const [saving, setSaving] = useState(false);
   const [ortoolsStatus, setOrtoolsStatus] = useState(null);
+  const [availableSections, setAvailableSections] = useState([]);
+  const [loadingSections, setLoadingSections] = useState(false);
   const [formData, setFormData] = useState({
-    program: 'BSIT',
-    yearLevel: 1,
-    semester: 1,
-    academicYear: '2024-2025',
-    section: 'A', // Single section - not creating, just selecting
+    section: '', // Section ID
     method: 'greedy', // 'greedy' or 'ortools'
-    shift: 'Day', // 'Day' or 'Night'
-    timeLimit: 60 // seconds for OR-Tools
+    timeLimit: 60, // seconds for OR-Tools
+    useAIRecommendations: true // Use AI RAG for faculty recommendations
   });
 
   // Check OR-Tools availability on mount
-  React.useEffect(() => {
+  useEffect(() => {
     checkOrtoolsAvailability();
   }, []);
+
+  const fetchAvailableSections = useCallback(async () => {
+    setLoadingSections(true);
+    console.log('=== FETCHING ALL SECTIONS ===');
+    
+    try {
+      const response = await sectionAPI.getAll();
+      
+      console.log('Sections response:', response.data);
+      
+      if (response.data.success) {
+        setAvailableSections(response.data.data || []);
+        console.log('Available sections:', response.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching sections:', error);
+      setAvailableSections([]);
+    } finally {
+      setLoadingSections(false);
+      console.log('=== SECTIONS FETCH COMPLETE ===');
+    }
+  }, []);
+
+  // Fetch sections on mount
+  useEffect(() => {
+    fetchAvailableSections();
+  }, [fetchAvailableSections]);
 
   const checkOrtoolsAvailability = async () => {
     try {
@@ -46,56 +72,125 @@ const GenerateScheduleModal = ({ onClose }) => {
     });
   };
 
+  const handleAIToggle = () => {
+    setFormData(prev => ({
+      ...prev,
+      useAIRecommendations: !prev.useAIRecommendations
+    }));
+  };
+
   const handleGenerate = async (e) => {
     e.preventDefault();
+    
+    console.log('=== GENERATE SCHEDULE PREVIEW CLICKED ===');
+    console.log('Form Data:', formData);
+    
+    if (!formData.section) {
+      console.error('No section selected!');
+      toast.error('Please select a section');
+      return;
+    }
+
+    // Find the selected section to get its details
+    const selectedSection = availableSections.find(s => s._id === formData.section);
+    if (!selectedSection) {
+      toast.error('Selected section not found');
+      return;
+    }
+
     setGenerating(true);
-    setGenerationResult(null);
+    setPreviewData(null);
 
     try {
       const generateData = {
-        ...formData,
-        yearLevel: parseInt(formData.yearLevel),
-        semester: parseInt(formData.semester),
-        section: formData.section, // Single section identifier
-        timeLimit: parseInt(formData.timeLimit)
+        program: selectedSection.program,
+        yearLevel: parseInt(selectedSection.yearLevel),
+        semester: parseInt(selectedSection.semester),
+        shift: selectedSection.shift,
+        section: selectedSection.sectionLetter,
+        academicYear: selectedSection.academicYear,
+        method: formData.method,
+        timeLimit: parseInt(formData.timeLimit),
+        useAIRecommendations: formData.useAIRecommendations
       };
 
-      const response = await scheduleAPI.generate(generateData);
+      console.log('Sending preview request:', generateData);
+      const response = await scheduleAPI.preview(generateData);
+      console.log('Preview response:', response.data);
       
       if (response.data.success) {
-        setGenerationResult({
+        setPreviewData({
           success: true,
           message: response.data.message,
           method: response.data.method,
-          data: response.data.data
+          methodNote: response.data.data.methodNote || response.data.data.preview?.methodNote,
+          aiUsed: response.data.aiUsed || formData.useAIRecommendations,
+          preview: response.data.data.preview || response.data.data,
+          sectionInfo: selectedSection
         });
-        toast.success(`Schedule generated successfully using ${response.data.method}!`);
+        
+        // Show note if OR-Tools fell back to greedy
+        if (response.data.data.methodNote) {
+          toast.success(response.data.data.methodNote, { duration: 5000 });
+        } else {
+          toast.success('Schedule preview generated successfully!');
+        }
       } else {
-        setGenerationResult({
+        setPreviewData({
           success: false,
           message: response.data.message,
-          method: response.data.method,
-          data: null
+          method: response.data.method
         });
-        toast.error(response.data.message || 'Failed to generate schedule');
+        toast.error(response.data.message || 'Failed to generate preview');
       }
     } catch (error) {
-      console.error('Generate error:', error);
-      const errorMessage = error.response?.data?.message || 'Failed to generate schedule';
-      setGenerationResult({
+      console.error('=== GENERATE PREVIEW ERROR ===');
+      console.error('Error object:', error);
+      console.error('Error response:', error.response);
+      
+      const errorMessage = error.response?.data?.message || 'Failed to generate preview';
+      setPreviewData({
         success: false,
-        message: errorMessage,
-        data: null
+        message: errorMessage
       });
       toast.error(errorMessage);
     } finally {
       setGenerating(false);
+      console.log('=== GENERATE PREVIEW COMPLETED ===');
+    }
+  };
+
+  const handleSaveSchedules = async () => {
+    if (!previewData || !previewData.preview || !previewData.preview.schedules) {
+      toast.error('No schedules to save');
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      console.log('Saving schedules:', previewData.preview.schedules);
+      const response = await scheduleAPI.savePreview({
+        schedules: previewData.preview.schedules
+      });
+
+      if (response.data.success) {
+        toast.success(`Successfully saved ${response.data.saved} schedule(s)!`);
+        onClose(true); // Refresh parent
+      } else {
+        toast.error(response.data.message || 'Failed to save schedules');
+      }
+    } catch (error) {
+      console.error('Save schedules error:', error);
+      toast.error(error.response?.data?.message || 'Failed to save schedules');
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleClose = () => {
-    // If generation was successful, refresh the parent
-    if (generationResult?.success) {
+    // If schedules were saved, refresh the parent
+    if (previewData?.success && !previewData.preview) {
       onClose(true);
     } else {
       onClose(false);
@@ -160,102 +255,33 @@ const GenerateScheduleModal = ({ onClose }) => {
                 assign faculty, rooms, and time slots based on qualifications, availability, and workload.
               </p>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Program */}
+              <div className="grid grid-cols-1 gap-4">
+                {/* Section Selector */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Program *
-                  </label>
-                  <select
-                    name="program"
-                    value={formData.program}
-                    onChange={handleChange}
-                    required
-                    disabled={generating}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
-                  >
-                    {PROGRAMS.map(prog => (
-                      <option key={prog} value={prog}>{prog}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Year Level */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Year Level *
-                  </label>
-                  <select
-                    name="yearLevel"
-                    value={formData.yearLevel}
-                    onChange={handleChange}
-                    required
-                    disabled={generating}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
-                  >
-                    {YEAR_LEVELS.map(year => (
-                      <option key={year} value={year}>Year {year}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Semester */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Semester *
-                  </label>
-                  <select
-                    name="semester"
-                    value={formData.semester}
-                    onChange={handleChange}
-                    required
-                    disabled={generating}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
-                  >
-                    {SEMESTERS.map(sem => (
-                      <option key={sem} value={sem}>Semester {sem}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Academic Year */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Academic Year *
-                  </label>
-                  <input
-                    type="text"
-                    name="academicYear"
-                    value={formData.academicYear}
-                    onChange={handleChange}
-                    required
-                    disabled={generating}
-                    placeholder="e.g., 2024-2025"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
-                  />
-                </div>
-
-                {/* Section Identifier */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Section *
+                    Select Section *
                   </label>
                   <select
                     name="section"
                     value={formData.section}
                     onChange={handleChange}
                     required
-                    disabled={generating}
+                    disabled={generating || loadingSections}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
                   >
-                    {['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].map(section => (
-                      <option key={section} value={section}>Section {section}</option>
+                    <option value="">-- Select a Section --</option>
+                    {availableSections.map(section => (
+                      <option key={section._id} value={section._id}>
+                        {section.sectionCode} ({section.program} - Year {section.yearLevel} - {section.shift}) - {section.currentStudents || 0}/{section.maxStudents} students
+                      </option>
                     ))}
                   </select>
                   <p className="text-xs text-gray-500 mt-1">
-                    Select the existing section to generate schedule for
+                    {loadingSections ? 'Loading sections...' : `${availableSections.length} section${availableSections.length !== 1 ? 's' : ''} available`}
                   </p>
                 </div>
+
+
               </div>
 
               {/* Advanced Options */}
@@ -266,6 +292,37 @@ const GenerateScheduleModal = ({ onClose }) => {
                 </h4>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* AI Recommendations Toggle */}
+                  <div className="md:col-span-2 p-4 bg-purple-50 rounded-lg border border-purple-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <Sparkles size={20} className="text-purple-600 mr-2" />
+                        <div>
+                          <h5 className="text-sm font-semibold text-purple-900">
+                            AI-Powered Faculty Recommendations
+                          </h5>
+                          <p className="text-xs text-purple-700 mt-1">
+                            Uses RAG to match faculty expertise with subjects (Gemini 2.5 Flash)
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleAIToggle}
+                        disabled={generating}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 ${
+                          formData.useAIRecommendations ? 'bg-purple-600' : 'bg-gray-300'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            formData.useAIRecommendations ? 'translate-x-6' : 'translate-x-1'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  </div>
+
                   {/* Generation Method */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -290,23 +347,6 @@ const GenerateScheduleModal = ({ onClose }) => {
                         'Advanced constraint solver, finds optimal solutions'
                       )}
                     </p>
-                  </div>
-
-                  {/* Shift */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Shift
-                    </label>
-                    <select
-                      name="shift"
-                      value={formData.shift}
-                      onChange={handleChange}
-                      disabled={generating}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
-                    >
-                      <option value="Day">Day (7 AM - 4 PM)</option>
-                      <option value="Night">Night (4 PM - 10 PM)</option>
-                    </select>
                   </div>
 
                   {/* Time Limit (OR-Tools only) */}
@@ -361,76 +401,172 @@ const GenerateScheduleModal = ({ onClose }) => {
               </div>
             </div>
 
-            {/* Generation Result */}
-            {generationResult && (
-              <div className={`mb-6 p-4 rounded-lg ${
-                generationResult.success 
-                  ? 'bg-green-50 border border-green-200' 
-                  : 'bg-red-50 border border-red-200'
-              }`}>
-                <div className="flex items-start">
-                  <div className="flex-shrink-0 mt-0.5">
-                    {generationResult.success ? (
-                      <CheckCircle className="text-green-600" size={24} />
-                    ) : (
-                      <AlertTriangle className="text-red-600" size={24} />
-                    )}
+            {/* Preview Results */}
+            {previewData && previewData.success && previewData.preview && (
+              <div className="mb-6 max-h-96 overflow-y-auto">
+                {/* Preview Header */}
+                <div className="mb-4 p-4 bg-purple-50 rounded-lg border border-purple-200 sticky top-0 z-10">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <h4 className="text-sm font-semibold text-purple-900">
+                          Schedule Preview - {previewData.sectionInfo?.sectionCode}
+                        </h4>
+                        {previewData.aiUsed && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-200 text-purple-900">
+                            <Sparkles size={12} className="mr-1" />
+                            AI-Powered
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-purple-700">
+                        {previewData.preview.statistics.scheduledSubjects} of {previewData.preview.statistics.totalSubjects} subjects scheduled successfully
+                      </p>
+                      {previewData.methodNote && (
+                        <p className="text-xs text-purple-600 mt-1 italic">
+                          {previewData.methodNote}
+                        </p>
+                      )}
+                    </div>
+                    <CheckCircle className="text-purple-600" size={24} />
                   </div>
-                  <div className="ml-3 flex-1">
-                    <h4 className={`text-sm font-semibold mb-1 ${
-                      generationResult.success ? 'text-green-800' : 'text-red-800'
-                    }`}>
-                      {generationResult.method || 'Generation'} Result
-                    </h4>
-                    <p className={`text-sm ${
-                      generationResult.success ? 'text-green-700' : 'text-red-700'
-                    }`}>
-                      {generationResult.message}
-                    </p>
-                    <h4 className={`text-sm font-semibold ${
-                      generationResult.success ? 'text-green-900' : 'text-red-900'
-                    }`}>
-                      {generationResult.success ? 'Generation Successful' : 'Generation Failed'}
-                    </h4>
-                    <p className={`text-sm mt-1 ${
-                      generationResult.success ? 'text-green-800' : 'text-red-800'
-                    }`}>
-                      {generationResult.message}
-                    </p>
+                </div>
 
-                    {/* Display detailed results if available */}
-                    {generationResult.data && Array.isArray(generationResult.data) && (
-                      <div className="mt-3 space-y-2">
-                        {generationResult.data.map((result, idx) => (
-                          <div key={idx} className="bg-white rounded-md p-3 border border-gray-200">
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="flex items-center">
-                                {getStatusIcon(result.status)}
-                                <span className="ml-2 font-medium text-gray-900">
-                                  {result.section}
+                {/* Statistics */}
+                <div className="grid grid-cols-3 gap-3 mb-4">
+                  <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <p className="text-xs text-green-600 font-medium">Scheduled</p>
+                    <p className="text-2xl font-bold text-green-700">
+                      {previewData.preview.statistics.scheduledSubjects}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-xs text-red-600 font-medium">Failed</p>
+                    <p className="text-2xl font-bold text-red-700">
+                      {previewData.preview.statistics.failedSubjects}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                    <p className="text-xs text-orange-600 font-medium">Conflicts</p>
+                    <p className="text-2xl font-bold text-orange-700">
+                      {previewData.preview.statistics.conflictsDetected}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Scheduled Subjects */}
+                {previewData.preview.schedules && previewData.preview.schedules.length > 0 && (
+                  <div className="mb-4">
+                    <h5 className="text-sm font-semibold text-gray-900 mb-2">
+                      ✓ Scheduled Subjects ({previewData.preview.schedules.length})
+                    </h5>
+                    <div className="space-y-2">
+                      {previewData.preview.schedules.map((schedule, idx) => (
+                        <div key={idx} className="bg-white rounded-lg p-3 border border-gray-200 hover:border-purple-300 transition-colors">
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-semibold text-gray-900">
+                                  {schedule.metadata.subjectCode}
+                                </span>
+                                <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded">
+                                  {schedule.metadata.units} units
                                 </span>
                               </div>
-                              <span className={`text-xs font-semibold uppercase ${getStatusColor(result.status)}`}>
-                                {result.status}
+                              <p className="text-sm text-gray-700 mb-1">
+                                {schedule.metadata.subjectName}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div>
+                              <span className="text-gray-500">Faculty:</span>
+                              <span className="ml-1 text-gray-900 font-medium">
+                                {schedule.metadata.facultyName}
                               </span>
                             </div>
-                            {result.message && (
-                              <p className="text-xs text-gray-600">{result.message}</p>
-                            )}
-                            {result.created > 0 && (
-                              <p className="text-xs text-green-600 mt-1">
-                                ✓ {result.created} schedule{result.created !== 1 ? 's' : ''} created
-                              </p>
-                            )}
-                            {result.failed > 0 && (
-                              <p className="text-xs text-red-600 mt-1">
-                                ✗ {result.failed} schedule{result.failed !== 1 ? 's' : ''} failed
-                              </p>
-                            )}
+                            <div>
+                              <span className="text-gray-500">Room:</span>
+                              <span className="ml-1 text-gray-900 font-medium">
+                                {schedule.metadata.roomName} (Cap: {schedule.metadata.roomCapacity})
+                              </span>
+                            </div>
                           </div>
-                        ))}
-                      </div>
-                    )}
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {schedule.timeSlots.map((slot, slotIdx) => (
+                              <span key={slotIdx} className="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded">
+                                {slot.day} {slot.startTime}-{slot.endTime}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Failed Subjects */}
+                {previewData.preview.failed && previewData.preview.failed.length > 0 && (
+                  <div className="mb-4">
+                    <h5 className="text-sm font-semibold text-red-700 mb-2">
+                      ✗ Failed Subjects ({previewData.preview.failed.length})
+                    </h5>
+                    <div className="space-y-2">
+                      {previewData.preview.failed.map((fail, idx) => (
+                        <div key={idx} className="bg-red-50 rounded-lg p-3 border border-red-200">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="font-semibold text-red-900">{fail.subject}</span>
+                              {fail.subjectName && (
+                                <span className="text-sm text-red-700 ml-2">- {fail.subjectName}</span>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-xs text-red-600 mt-1">{fail.reason}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Conflicts */}
+                {previewData.preview.conflicts && previewData.preview.conflicts.length > 0 && (
+                  <div className="mb-4">
+                    <h5 className="text-sm font-semibold text-orange-700 mb-2">
+                      ⚠ Conflicts Detected ({previewData.preview.conflicts.length})
+                    </h5>
+                    <div className="space-y-2">
+                      {previewData.preview.conflicts.map((conflict, idx) => (
+                        <div key={idx} className="bg-orange-50 rounded-lg p-3 border border-orange-200">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="font-semibold text-orange-900">{conflict.subject}</span>
+                              {conflict.subjectName && (
+                                <span className="text-sm text-orange-700 ml-2">- {conflict.subjectName}</span>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-xs text-orange-600 mt-1">{conflict.reason}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Failed Generation */}
+            {previewData && !previewData.success && (
+              <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200">
+                <div className="flex items-start">
+                  <AlertTriangle className="text-red-600 flex-shrink-0 mt-0.5" size={24} />
+                  <div className="ml-3 flex-1">
+                    <h4 className="text-sm font-semibold text-red-800 mb-1">
+                      Generation Failed
+                    </h4>
+                    <p className="text-sm text-red-700">
+                      {previewData.message}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -445,7 +581,7 @@ const GenerateScheduleModal = ({ onClose }) => {
                     <Wand2 className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-purple-600" size={24} />
                   </div>
                   <p className="mt-4 text-sm font-medium text-purple-900">
-                    Generating schedule with AI...
+                    Generating schedule preview...
                   </p>
                   <p className="text-xs text-purple-700 mt-1">
                     This may take a few moments
@@ -455,18 +591,26 @@ const GenerateScheduleModal = ({ onClose }) => {
             )}
 
             {/* AI Info Box */}
-            {!generating && !generationResult && (
+            {!generating && !previewData && (
               <div className="mb-6 p-4 bg-purple-50 rounded-lg border border-purple-200">
-                <h4 className="text-sm font-semibold text-purple-900 mb-2">
+                <h4 className="text-sm font-semibold text-purple-900 mb-2 flex items-center">
+                  <Sparkles size={16} className="mr-2" />
                   How AI Generation Works
                 </h4>
                 <ul className="text-xs text-purple-800 space-y-1">
-                  <li>• Analyzes faculty qualifications and specializations</li>
+                  {formData.useAIRecommendations && (
+                    <>
+                      <li>• <strong>RAG-Powered Matching:</strong> Analyzes faculty teaching history and subject expertise</li>
+                      <li>• <strong>Experience Scoring:</strong> Prioritizes faculty with most years teaching specific subjects</li>
+                      <li>• <strong>Smart Recommendations:</strong> Shows match percentages based on qualifications and experience</li>
+                    </>
+                  )}
                   <li>• Balances teaching workload across faculty members</li>
                   <li>• Assigns appropriate rooms based on subject type and capacity</li>
                   <li>• Optimizes time slots to avoid conflicts</li>
                   <li>• Considers faculty availability and preferences</li>
                   <li>• Ensures curriculum requirements are met</li>
+                  <li className="text-purple-900 font-medium mt-2">• <strong>Preview First:</strong> Review and approve before saving to database</li>
                 </ul>
               </div>
             )}
@@ -476,26 +620,50 @@ const GenerateScheduleModal = ({ onClose }) => {
               <button
                 type="button"
                 onClick={handleClose}
-                disabled={generating}
+                disabled={generating || saving}
                 className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50"
               >
-                {generationResult?.success ? 'Close' : 'Cancel'}
+                {previewData?.success && previewData.preview ? 'Cancel' : 'Close'}
               </button>
-              {!generationResult?.success && (
+              
+              {/* Preview Button - Shows when no preview yet */}
+              {!previewData && (
                 <button
                   type="submit"
-                  disabled={generating}
-                  className="flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+                  disabled={generating || !formData.section}
+                  className="flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {generating ? (
                     <>
                       <Loader className="animate-spin mr-2" size={18} />
-                      Generating...
+                      Generating Preview...
                     </>
                   ) : (
                     <>
                       <Wand2 size={18} className="mr-2" />
-                      Generate Schedule
+                      Generate Preview
+                    </>
+                  )}
+                </button>
+              )}
+
+              {/* Save Button - Shows when preview is ready */}
+              {previewData?.success && previewData.preview && previewData.preview.schedules?.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleSaveSchedules}
+                  disabled={saving}
+                  className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {saving ? (
+                    <>
+                      <Loader className="animate-spin mr-2" size={18} />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle size={18} className="mr-2" />
+                      Save {previewData.preview.schedules.length} Schedule{previewData.preview.schedules.length !== 1 ? 's' : ''}
                     </>
                   )}
                 </button>

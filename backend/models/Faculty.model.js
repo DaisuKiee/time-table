@@ -23,6 +23,12 @@ const FacultySchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  employmentType: {
+    type: String,
+    required: true,
+    enum: ['Regular', 'Part-time'],
+    default: 'Regular'
+  },
   qualifications: [{
     degree: {
       type: String,

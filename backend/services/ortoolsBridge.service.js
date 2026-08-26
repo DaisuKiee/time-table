@@ -328,7 +328,33 @@ async function checkORToolsAvailability() {
   }
 }
 
+/**
+ * Preview schedule using Google OR-Tools (doesn't save to DB)
+ * @param {Object} params - Generation parameters
+ * @returns {Promise<Object>} Preview of optimization results
+ */
+async function previewWithORTools(params) {
+  // For now, return a message that OR-Tools preview is not implemented yet
+  // In production, this would call the Python script and return results without saving
+  return {
+    success: false,
+    message: 'OR-Tools preview is not yet implemented. Please use greedy algorithm for preview.',
+    preview: {
+      schedules: [],
+      failed: [],
+      conflicts: [],
+      statistics: {
+        totalSubjects: 0,
+        scheduledSubjects: 0,
+        failedSubjects: 0,
+        conflictsDetected: 0
+      }
+    }
+  };
+}
+
 module.exports = {
   generateWithORTools,
+  previewWithORTools,
   checkORToolsAvailability
 };

@@ -4,14 +4,13 @@ import { scheduleAPI, subjectAPI, sectionAPI, facultyAPI, roomAPI } from '../ser
 import toast from 'react-hot-toast';
 import { 
   Calendar as CalendarIcon, Plus, Download, Search, X,
-  Wand2, AlertTriangle, CheckCircle, FileText, Grid, Users,
+  Wand2, AlertTriangle, CheckCircle, FileText, Grid,
   Clock, BookOpen, School, List, MapPin,
   Edit2, Trash2
 } from 'lucide-react';
 import ScheduleModal from '../components/ScheduleModal';
 import GenerateScheduleModal from '../components/GenerateScheduleModal';
 import ConflictWarning from '../components/ConflictWarning';
-import FacultyDragDrop from '../components/FacultyDragDrop';
 import ScheduleBuilder from '../components/ScheduleBuilder';
 import TimetableGrid from '../components/TimetableGrid';
 import { exportToCSV, exportToOfficialPDF, exportToPrintableHTML, exportWeeklyTimetable } from '../utils/scheduleExport';
@@ -51,8 +50,9 @@ const SchedulePage = () => {
   });
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showConflictWarning, setShowConflictWarning] = useState(false);
-  const [viewMode, setViewMode] = useState('calendar'); // 'calendar', 'list', 'builder', 'dragdrop'
+  const [viewMode, setViewMode] = useState('calendar'); // 'calendar', 'list', 'builder'
   const [timetableView, setTimetableView] = useState('week'); // 'week', 'day'
+  const [selectedSection, setSelectedSection] = useState(null); // for program manager section picker
 
   // Permission checks
   const canEditSchedules = user?.role === 'admin' || user?.role === 'scheduling_officer' || user?.role === 'program_manager';
@@ -138,6 +138,25 @@ const SchedulePage = () => {
       setSections(sectionData);
     } catch (error) {
       console.error('Load sections error:', error);
+    }
+  };
+
+  // When a program manager picks a section, auto-fill yearLevel, semester, shift
+  const handleSectionSelect = (sectionId) => {
+    if (!sectionId) {
+      setSelectedSection(null);
+      setFilters(prev => ({ ...prev, yearLevel: '', shift: '', semester: 1 }));
+      return;
+    }
+    const section = sections.find(s => s._id === sectionId);
+    if (section) {
+      setSelectedSection(section);
+      setFilters(prev => ({
+        ...prev,
+        yearLevel: section.yearLevel,
+        shift: section.shift,
+        semester: section.semester
+      }));
     }
   };
 
@@ -463,6 +482,7 @@ const SchedulePage = () => {
 
               {/* Filters */}
               <div className="flex flex-wrap gap-2">
+                {/* Program — locked for program managers */}
                 <select
                   value={filters.program}
                   onChange={(e) => setFilters({ ...filters, program: e.target.value })}
@@ -481,37 +501,21 @@ const SchedulePage = () => {
                   )}
                 </select>
 
-                <select
-                  value={filters.yearLevel}
-                  onChange={(e) => setFilters({ ...filters, yearLevel: e.target.value })}
-                  className="px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm transition-all"
-                >
-                  <option value="">All Years</option>
-                  {YEAR_LEVELS.map(year => (
-                    <option key={year} value={year}>Year {year}</option>
-                  ))}
-                </select>
-
-                <select
-                  value={filters.semester}
-                  onChange={(e) => setFilters({ ...filters, semester: parseInt(e.target.value) })}
-                  className="px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm transition-all"
-                >
-                  {SEMESTERS.map(sem => (
-                    <option key={sem} value={sem}>Sem {sem}</option>
-                  ))}
-                </select>
-
-                <select
-                  value={filters.shift}
-                  onChange={(e) => setFilters({ ...filters, shift: e.target.value })}
-                  className="px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm transition-all"
-                >
-                  <option value="">All Shifts</option>
-                  {SHIFTS.map(shift => (
-                    <option key={shift} value={shift}>{shift}</option>
-                  ))}
-                </select>
+                {/* Section picker for program managers — auto-fills year, semester, shift */}
+                {isProgramManager && sections.length > 0 && (
+                  <select
+                    value={selectedSection?._id || ''}
+                    onChange={(e) => handleSectionSelect(e.target.value)}
+                    className="px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm transition-all font-medium"
+                  >
+                    <option value="">Select Section</option>
+                    {sections.map(s => (
+                      <option key={s._id} value={s._id}>
+                        {s.sectionCode} — Year {s.yearLevel} · Sem {s.semester} · {s.shift}
+                      </option>
+                    ))}
+                  </select>
+                )}
 
                 {/* View Toggle */}
                 <div className="flex border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden">
@@ -541,7 +545,7 @@ const SchedulePage = () => {
                     <>
                       <button
                         onClick={() => setViewMode('builder')}
-                        className={`px-3 py-2 border-l border-gray-300 dark:border-gray-600 transition-colors ${
+                        className={`px-3 py-2 border-l border-gray-300 dark:border-gray-600 rounded-r-lg transition-colors ${
                           viewMode === 'builder' 
                             ? 'bg-blue-600 text-white' 
                             : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-600'
@@ -549,17 +553,6 @@ const SchedulePage = () => {
                         title="Schedule Builder"
                       >
                         <Grid className="w-5 h-5" />
-                      </button>
-                      <button
-                        onClick={() => setViewMode('dragdrop')}
-                        className={`px-3 py-2 border-l border-gray-300 dark:border-gray-600 transition-colors ${
-                          viewMode === 'dragdrop' 
-                            ? 'bg-blue-600 text-white' 
-                            : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-600'
-                        }`}
-                        title="Faculty Assignment"
-                      >
-                        <Users className="w-5 h-5" />
                       </button>
                     </>
                   )}
@@ -642,6 +635,34 @@ const SchedulePage = () => {
           </div>
         )}
 
+        {/* Selected Section Info Banner — program manager */}
+        {isProgramManager && selectedSection && (
+          <div className="mb-4 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-xl p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <School className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-bold text-blue-900 dark:text-blue-100">
+                    {selectedSection.sectionCode}
+                  </p>
+                  <p className="text-xs text-blue-700 dark:text-blue-300">
+                    {selectedSection.program} &nbsp;·&nbsp; Year {selectedSection.yearLevel} &nbsp;·&nbsp; Semester {selectedSection.semester} &nbsp;·&nbsp; {selectedSection.shift} Shift
+                    {selectedSection.adviser?.user && (
+                      <> &nbsp;·&nbsp; Adviser: {selectedSection.adviser.user.firstName} {selectedSection.adviser.user.lastName}</>
+                    )}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => handleSectionSelect('')}
+                className="text-blue-400 hover:text-blue-600 dark:hover:text-blue-200 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Student View Notice */}
         {isStudent && (
           <div className="mb-4 bg-blue-50 border border-blue-200 rounded-xl p-4 dark:bg-blue-900 dark:border-blue-700">
@@ -698,12 +719,7 @@ const SchedulePage = () => {
             sections={sections}
             faculty={faculty}
             rooms={rooms}
-            onAssignmentChange={loadAllData}
-          />
-        ) : viewMode === 'dragdrop' ? (
-          <FacultyDragDrop 
-            filters={filters}
-            faculty={faculty}
+            selectedSection={selectedSection}
             onAssignmentChange={loadAllData}
           />
         ) : viewMode === 'list' ? (
@@ -909,11 +925,10 @@ const SchedulePage = () => {
         )}
 
         {/* View Mode Info */}
-        {(viewMode === 'builder' || viewMode === 'dragdrop') && (
+        {viewMode === 'builder' && (
           <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-3 dark:bg-blue-900 dark:border-blue-700">
             <p className="text-sm text-blue-900 dark:text-blue-100">
-              {viewMode === 'builder' && '📚 Schedule Builder: Drag subjects to time slots, select duration (1-3 hours), then assign faculty and rooms'}
-              {viewMode === 'dragdrop' && '👨‍🏫 Faculty Assignment: Drag faculty members to existing schedule slots to reassign them'}
+              📚 Schedule Builder: Drag subjects to time slots, select duration (1-3 hours), then assign faculty and rooms
             </p>
           </div>
         )}

@@ -57,14 +57,20 @@ const ClassSpaceSchema = new mongoose.Schema({
   schedule: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Schedule',
-    required: true,
-    unique: true
+    default: null
   },
   sectionCode: {
     type: String,
     required: true,
     unique: true,
     trim: true
+  },
+  enrollmentCode: {
+    type: String,
+    unique: true,
+    sparse: true,
+    trim: true,
+    uppercase: true
   },
   announcements: [AnnouncementSchema],
   materials: [MaterialSchema],
@@ -93,5 +99,15 @@ const ClassSpaceSchema = new mongoose.Schema({
 // No additional indexes needed - unique fields already have indexes
 // ClassSpaceSchema.index({ sectionCode: 1 }); // Already has unique: true
 // ClassSpaceSchema.index({ schedule: 1 }); // Already has unique: true
+
+// Static helper to generate a random 8-char enrollment code
+ClassSpaceSchema.statics.generateEnrollmentCode = function() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let code = '';
+  for (let i = 0; i < 8; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+};
 
 module.exports = mongoose.model('ClassSpace', ClassSpaceSchema);

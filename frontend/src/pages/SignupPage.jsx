@@ -15,8 +15,6 @@ const SignupPage = () => {
     studentId: '',
     email: '',
     program: 'BSIT',
-    yearLevel: '1',
-    section: '',
     password: '',
     confirmPassword: ''
   });
@@ -136,9 +134,7 @@ const SignupPage = () => {
           firstName: formData.firstName,
           lastName: formData.lastName,
           studentId: formData.studentId,
-          program: formData.program,
-          yearLevel: formData.yearLevel,
-          section: formData.section
+          program: formData.program
         })
       });
 
@@ -346,71 +342,26 @@ const SignupPage = () => {
               />
             </div>
 
-            {/* Program and Year Level */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="program" className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Program
-                </label>
-                <select
-                  id="program"
-                  name="program"
-                  value={formData.program}
-                  onChange={handleChange}
-                  className="block w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white"
-                >
-                  <option value="BSIT">BSIT</option>
-                  <option value="BSHM">BSHM</option>
-                  <option value="BIT-ET">BIT-ET</option>
-                  <option value="BIT-CT">BIT-CT</option>
-                  <option value="BIT-AT">BIT-AT</option>
-                  <option value="BSFI">BSFI</option>
-                  <option value="BSIE">BSIE</option>
-                </select>
-              </div>
-              <div>
-                <label htmlFor="yearLevel" className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Year Level
-                </label>
-                <select
-                  id="yearLevel"
-                  name="yearLevel"
-                  value={formData.yearLevel}
-                  onChange={handleChange}
-                  className="block w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white"
-                >
-                  <option value="1">1st Year</option>
-                  <option value="2">2nd Year</option>
-                  <option value="3">3rd Year</option>
-                  <option value="4">4th Year</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Section / Class Space */}
+            {/* Program */}
             <div>
-              <label htmlFor="section" className="block text-sm font-medium text-gray-700 mb-1.5">
-                Section / Class
+              <label htmlFor="program" className="block text-sm font-medium text-gray-700 mb-1.5">
+                Program
               </label>
               <select
-                id="section"
-                name="section"
-                required
-                value={formData.section}
+                id="program"
+                name="program"
+                value={formData.program}
                 onChange={handleChange}
-                className="block w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                className="block w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white"
               >
-                <option value="">Select Section</option>
-                <option value="A">A</option>
-                <option value="B">B</option>
-                <option value="C">C</option>
-                <option value="D">D</option>
-                <option value="E">E</option>
-                <option value="F">F</option>
-                <option value="G">G</option>
-                <option value="H">H</option>
+                <option value="BSIT">BSIT</option>
+                <option value="BSHM">BSHM</option>
+                <option value="BIT-ET">BIT-ET</option>
+                <option value="BIT-CT">BIT-CT</option>
+                <option value="BIT-AT">BIT-AT</option>
+                <option value="BSFI">BSFI</option>
+                <option value="BSIE">BSIE</option>
               </select>
-              <p className="mt-1 text-xs text-gray-500">Select your section (A, B, C, etc.)</p>
             </div>
 
             {/* Password Input */}

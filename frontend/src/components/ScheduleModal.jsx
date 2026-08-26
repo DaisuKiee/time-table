@@ -223,7 +223,7 @@ const ScheduleModal = ({ mode, schedule, subjects: propSubjects, sections: propS
                   <option value="">Select room...</option>
                   {rooms.map(room => (
                     <option key={room._id} value={room._id}>
-                      {room.roomNumber} - {room.building} (Cap: {room.capacity})
+                      {room.roomCode || room.roomNumber} — {room.roomName || room.building} (Cap: {room.capacity})
                     </option>
                   ))}
                 </select>

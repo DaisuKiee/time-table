@@ -476,9 +476,9 @@ const StudentPage = () => {
                       <BookOpen className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                     </div>
                     <div className="flex-1">
-                      <p className="text-gray-600 dark:text-gray-400 text-xs">Section & Type</p>
+                      <p className="text-gray-600 dark:text-gray-400 text-xs">Section Code & Type</p>
                       <p className="font-medium text-gray-900 dark:text-white capitalize">
-                        {student.section} • {student.studentType}
+                        {student.sectionCode || `${student.section} (Not Assigned)`} • {student.studentType}
                       </p>
                     </div>
                   </div>

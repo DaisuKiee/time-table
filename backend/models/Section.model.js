@@ -8,6 +8,13 @@ const SectionSchema = new mongoose.Schema({
     trim: true,
     uppercase: true
   },
+  enrollmentCode: {
+    type: String,
+    unique: true,
+    sparse: true,
+    trim: true,
+    uppercase: true
+  },
   program: {
     type: String,
     required: [true, 'Program is required'],
@@ -68,10 +75,19 @@ const SectionSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Index for faster queries
+// Index for faster queries (sectionCode and enrollmentCode already indexed via unique:true)
 SectionSchema.index({ program: 1, yearLevel: 1, sectionLetter: 1 });
-SectionSchema.index({ sectionCode: 1 });
 SectionSchema.index({ academicYear: 1, semester: 1 });
+
+// Method to generate random enrollment code
+SectionSchema.methods.generateEnrollmentCode = function() {
+  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let code = '';
+  for (let i = 0; i < 8; i++) {
+    code += characters.charAt(Math.floor(Math.random() * characters.length));
+  }
+  return code;
+};
 
 // Virtual for full section name
 SectionSchema.virtual('fullName').get(function() {

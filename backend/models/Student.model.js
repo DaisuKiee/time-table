@@ -18,21 +18,25 @@ const StudentSchema = new mongoose.Schema({
     required: [true, 'Program is required'],
     enum: ['BSIT', 'BSHM', 'BIT-ET', 'BIT-CT', 'BIT-AT', 'BSFI', 'BSIE']
   },
-  yearLevel: {
-    type: Number,
-    required: [true, 'Year level is required'],
-    min: 1,
-    max: 4
-  },
-  section: {
-    type: String,
-    required: [true, 'Section is required'],
-    trim: true
-  },
   studentType: {
     type: String,
     enum: ['regular', 'irregular'],
-    default: 'regular'
+    default: 'regular',
+    required: true
+  },
+  // For regular students: enrolled in a section (e.g., "BSIT-4A")
+  // Will be assigned by program manager after signup
+  sectionCode: {
+    type: String,
+    trim: true,
+    uppercase: true,
+    default: null
+  },
+  // For irregular students: enrolled in specific subjects
+  // Will be assigned by program manager
+  subjectCodes: {
+    type: [String],
+    default: []
   },
   academicYear: {
     type: String,
@@ -91,7 +95,8 @@ const StudentSchema = new mongoose.Schema({
 
 // Index for faster queries
 StudentSchema.index({ studentId: 1 });
-StudentSchema.index({ program: 1, yearLevel: 1, section: 1 });
+StudentSchema.index({ program: 1, sectionCode: 1 });
 StudentSchema.index({ user: 1 });
+StudentSchema.index({ studentType: 1 });
 
 module.exports = mongoose.model('Student', StudentSchema);

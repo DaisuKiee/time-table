@@ -128,13 +128,26 @@ exports.createClassSpace = async (req, res) => {
     }
 
     // Create class space
-    const classSpace = await ClassSpace.create({
+    const classSpace = new ClassSpace({
       schedule: scheduleId,
       sectionCode,
       announcements: [],
       materials: [],
       enrolledStudents: []
     });
+
+    // Generate unique enrollment code
+    let isUnique = false;
+    while (!isUnique) {
+      const candidate = ClassSpace.generateEnrollmentCode();
+      const existing = await ClassSpace.findOne({ enrollmentCode: candidate });
+      if (!existing) {
+        classSpace.enrollmentCode = candidate;
+        isUnique = true;
+      }
+    }
+
+    await classSpace.save();
 
     // Link class space to schedule
     schedule.classSpace = classSpace._id;
@@ -529,7 +542,7 @@ exports.enrollStudent = async (req, res) => {
 
     // Check class capacity
     const schedule = await Schedule.findById(classSpace.schedule);
-    if (schedule.enrolledStudents >= schedule.maxStudents) {
+    if (schedule && schedule.enrolledStudents >= schedule.maxStudents) {
       return res.status(400).json({
         success: false,
         message: 'Class is full'
@@ -540,12 +553,14 @@ exports.enrollStudent = async (req, res) => {
     classSpace.enrolledStudents.push({
       student: req.user._id,
       enrolledAt: new Date(),
-      isRegular: req.body.isRegular !== false // Default to true
+      isRegular: req.body.isRegular !== false
     });
 
-    // Update schedule enrollment count
-    schedule.enrolledStudents += 1;
-    await schedule.save();
+    // Update schedule enrollment count if schedule exists
+    if (schedule) {
+      schedule.enrolledStudents += 1;
+      await schedule.save();
+    }
 
     await classSpace.save();
 
@@ -593,9 +608,9 @@ exports.unenrollStudent = async (req, res) => {
     // Remove enrollment
     classSpace.enrolledStudents.splice(enrollmentIndex, 1);
 
-    // Update schedule enrollment count
+    // Update schedule enrollment count if schedule exists
     const schedule = await Schedule.findById(classSpace.schedule);
-    if (schedule.enrolledStudents > 0) {
+    if (schedule && schedule.enrolledStudents > 0) {
       schedule.enrolledStudents -= 1;
       await schedule.save();
     }
@@ -617,13 +632,15 @@ exports.unenrollStudent = async (req, res) => {
   }
 };
 
-// @desc    Get class space by section code
-// @route   GET /api/classSpaces/code/:sectionCode
+// @desc    Get class space by enrollment code
+// @route   GET /api/classSpaces/code/:enrollmentCode
 // @access  Private
 exports.getClassSpaceByCode = async (req, res) => {
   try {
+    const code = req.params.enrollmentCode.toUpperCase().trim();
+
     const classSpace = await ClassSpace.findOne({ 
-      sectionCode: req.params.sectionCode,
+      enrollmentCode: code,
       isActive: true 
     })
     .populate({
@@ -637,7 +654,7 @@ exports.getClassSpaceByCode = async (req, res) => {
     if (!classSpace) {
       return res.status(404).json({
         success: false,
-        message: 'Class space not found with this section code'
+        message: 'Invalid enrollment code. Please check the code and try again.'
       });
     }
 
@@ -664,7 +681,7 @@ exports.getMyClassSpaces = async (req, res) => {
     let classSpaces;
 
     if (req.user.role === 'faculty') {
-      // Get classes where user is the faculty
+      // Faculty: get all class spaces for their schedules
       const schedules = await Schedule.find({
         faculty: req.user.facultyProfile,
         isActive: true
@@ -676,27 +693,71 @@ exports.getMyClassSpaces = async (req, res) => {
       })
       .populate({
         path: 'schedule',
-        populate: { path: 'subject', select: 'subjectCode subjectName units' }
+        populate: [
+          { path: 'subject', select: 'subjectCode subjectName units' },
+          { path: 'faculty', populate: { path: 'user', select: 'firstName lastName profilePicture' } }
+        ]
       });
 
     } else if (req.user.role === 'student') {
-      // Get classes where user is enrolled
-      classSpaces = await ClassSpace.find({
-        'enrolledStudents.student': req.user._id,
+      const Student = require('../models/Student.model');
+      const student = await Student.findOne({ user: req.user._id });
+
+      if (!student || !student.sectionCode) {
+        // Student hasn't enrolled in a section yet
+        return res.status(200).json({
+          success: true,
+          count: 0,
+          data: [],
+          enrolled: false
+        });
+      }
+
+      // Find all published schedules for this student's section
+      const schedules = await Schedule.find({
+        sectionCode: student.sectionCode,
         isActive: true
-      })
-      .populate({
-        path: 'schedule',
-        populate: [
-          { path: 'subject', select: 'subjectCode subjectName units' },
-          { path: 'faculty', populate: { path: 'user', select: 'firstName lastName' } }
-        ]
       });
+
+      // Get or create ClassSpaces for each schedule
+      classSpaces = [];
+      for (const schedule of schedules) {
+        let cs = await ClassSpace.findOne({ schedule: schedule._id });
+        if (!cs) {
+          // Auto-create ClassSpace if it doesn't exist yet
+          cs = await ClassSpace.create({
+            schedule: schedule._id,
+            sectionCode: schedule.sectionCode + '-' + schedule._id.toString().slice(-4),
+            announcements: [],
+            materials: [],
+            enrolledStudents: [],
+            isActive: true
+          });
+        }
+        await cs.populate({
+          path: 'schedule',
+          populate: [
+            { path: 'subject', select: 'subjectCode subjectName units' },
+            { path: 'faculty', populate: { path: 'user', select: 'firstName lastName profilePicture' } }
+          ]
+        });
+        classSpaces.push(cs);
+      }
+
+      // Also include the section-level ClassSpace (schedule: null)
+      const sectionCS = await ClassSpace.findOne({ 
+        sectionCode: student.sectionCode, 
+        schedule: null,
+        isActive: true
+      });
+      if (sectionCS) {
+        classSpaces.unshift(sectionCS);
+      }
 
     } else {
       return res.status(403).json({
         success: false,
-        message: 'Not authorized to access class spaces'
+        message: 'Not authorized'
       });
     }
 
@@ -711,6 +772,100 @@ exports.getMyClassSpaces = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error fetching class spaces',
+      error: error.message
+    });
+  }
+};
+
+// @desc    Enroll student by section enrollment code
+// @route   POST /api/classSpaces/enroll-by-code
+// @access  Private (students only)
+exports.enrollByCode = async (req, res) => {
+  try {
+    const { enrollmentCode } = req.body;
+
+    if (!enrollmentCode) {
+      return res.status(400).json({
+        success: false,
+        message: 'Enrollment code is required'
+      });
+    }
+
+    const Section = require('../models/Section.model');
+    const Student = require('../models/Student.model');
+
+    // 1. Find the section with this enrollment code
+    const section = await Section.findOne({
+      enrollmentCode: enrollmentCode.toUpperCase().trim(),
+      isActive: true
+    }).populate({
+      path: 'adviser',
+      populate: { path: 'user', select: 'firstName lastName' }
+    });
+
+    if (!section) {
+      return res.status(404).json({
+        success: false,
+        message: 'Invalid enrollment code. Please check and try again.'
+      });
+    }
+
+    // 2. Find the student profile
+    const student = await Student.findOne({ user: req.user._id });
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student profile not found'
+      });
+    }
+
+    // 3. Check if already enrolled in this section
+    if (student.sectionCode === section.sectionCode) {
+      return res.status(400).json({
+        success: false,
+        message: `You are already enrolled in section ${section.sectionCode}`
+      });
+    }
+
+    // 4. Check capacity
+    if (section.currentStudents >= section.maxStudents) {
+      return res.status(400).json({
+        success: false,
+        message: 'This section is already full'
+      });
+    }
+
+    // 5. Set student's sectionCode and update enrollment info from the section
+    student.sectionCode = section.sectionCode;
+    student.enrollmentStatus = 'enrolled';
+    student.academicYear = section.academicYear;
+    student.semester = section.semester;
+    await student.save();
+
+    // 6. Increment section's currentStudents count
+    await Section.findByIdAndUpdate(section._id, { $inc: { currentStudents: 1 } });
+
+    res.status(200).json({
+      success: true,
+      message: `Successfully enrolled in ${section.sectionCode}`,
+      data: {
+        sectionCode: section.sectionCode,
+        program: section.program,
+        yearLevel: section.yearLevel,
+        shift: section.shift,
+        academicYear: section.academicYear,
+        semester: section.semester,
+        adviser: section.adviser?.user
+          ? `${section.adviser.user.firstName} ${section.adviser.user.lastName}`
+          : null
+      }
+    });
+
+  } catch (error) {
+    console.error('Enroll by code error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error enrolling in section',
       error: error.message
     });
   }

@@ -73,16 +73,6 @@ const UserSchema = new mongoose.Schema({
       message: 'Program is required for program managers'
     }
   },
-  yearLevel: {
-    type: Number,
-    min: 1,
-    max: 4,
-    default: null
-  },
-  section: {
-    type: String,
-    trim: true
-  },
   shift: {
     type: String,
     enum: ['Day', 'Night', null],

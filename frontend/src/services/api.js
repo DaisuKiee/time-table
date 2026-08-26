@@ -94,7 +94,8 @@ export const studentAPI = {
   getStats: () => api.get('/students/stats'),
   bulkImport: (formData) => api.post('/students/bulk-import', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
-  })
+  }),
+  assignSectionCode: (id, data) => api.put(`/students/${id}/assign-section`, data)
 };
 
 // ============== ACTIVITY LOG ENDPOINTS ==============
@@ -159,6 +160,8 @@ export const scheduleAPI = {
   checkConflicts: (data) => api.post('/schedules/check-conflicts', data),
   publish: (data) => api.post('/schedules/publish', data),
   generate: (data) => api.post('/schedules/generate', data),
+  preview: (data) => api.post('/schedules/preview', data),
+  savePreview: (data) => api.post('/schedules/save-preview', data),
   checkORToolsStatus: () => api.get('/schedules/ortools-status')
 };
 
@@ -169,6 +172,15 @@ export const aiAPI = {
   analyzeWorkload: (data) => api.post('/ai/analyze-workload', data),
   predictScheduleQuality: (data) => api.post('/ai/predict-schedule-quality', data),
   getInsights: (params) => api.get('/ai/insights', { params })
+};
+
+// ============== AI CHAT ENDPOINTS ==============
+export const aiChatAPI = {
+  sendMessage: (data) => api.post('/ai/chat', data),
+  getRecommendation: (data) => api.post('/ai/recommend', data),
+  recommendFaculty: (data) => api.post('/ai/recommend-faculty', data),
+  getStats: () => api.get('/ai/stats'),
+  getQuickHelp: () => api.get('/ai/help')
 };
 
 // ============== IMPORT ENDPOINTS ==============
@@ -208,7 +220,8 @@ export const classSpaceAPI = {
   
   // Enrollment
   enroll: (id, data) => api.post(`/classSpaces/${id}/enroll`, data),
-  unenroll: (id) => api.post(`/classSpaces/${id}/unenroll`)
+  unenroll: (id) => api.post(`/classSpaces/${id}/unenroll`),
+  enrollByCode: (enrollmentCode) => api.post('/classSpaces/enroll-by-code', { enrollmentCode })
 };
 
 // ============== SECTION ENDPOINTS ==============
@@ -220,7 +233,8 @@ export const sectionAPI = {
   delete: (id) => api.delete(`/sections/${id}`),
   getByProgramAndYear: (program, year, params) => 
     api.get(`/sections/program/${program}/year/${year}`, { params }),
-  getStats: () => api.get('/sections/stats')
+  getStats: () => api.get('/sections/stats'),
+  regenerateEnrollmentCode: (id) => api.put(`/sections/${id}/regenerate-code`)
 };
 
 export default api;

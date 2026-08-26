@@ -17,7 +17,8 @@ const {
   enrollStudent,
   unenrollStudent,
   getClassSpaceByCode,
-  getMyClassSpaces
+  getMyClassSpaces,
+  enrollByCode
 } = require('../controllers/classSpace.controller');
 const { protect, authorize } = require('../middleware/auth.middleware');
 
@@ -53,10 +54,13 @@ const upload = multer({
 // All routes require authentication
 router.use(protect);
 
+// Student section enrollment by code (must be before /:id routes)
+router.post('/enroll-by-code', authorize('student'), enrollByCode);
+
 // Public class space routes (authenticated users)
 router.get('/', getAllClassSpaces);
 router.get('/my-classes', getMyClassSpaces);
-router.get('/code/:sectionCode', getClassSpaceByCode);
+router.get('/code/:enrollmentCode', getClassSpaceByCode);
 router.get('/:id', getClassSpaceById);
 
 // Student enrollment

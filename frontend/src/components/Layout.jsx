@@ -9,6 +9,7 @@ import {
   Building2, Layers
 } from 'lucide-react';
 import ctuLogo from '../assets/images/logos/ctulogo.png';
+import AIChatBubble from './AIChatBubble';
 
 const Layout = ({ children }) => {
   const { user, logout } = useAuth();
@@ -468,6 +469,11 @@ const Layout = ({ children }) => {
           {children}
         </div>
       </div>
+
+      {/* AI Chat Bubble - Available on all manager pages */}
+      {(user?.role === 'admin' || user?.role === 'scheduling_officer' || user?.role === 'program_manager') && (
+        <AIChatBubble />
+      )}
 
       {/* Custom Scrollbar Styles */}
       <style>{`

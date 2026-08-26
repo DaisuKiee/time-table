@@ -51,6 +51,6 @@ router.get('/:id', getRoomById);
 // Admin/Scheduling Officer/Program Manager only routes
 router.post('/', authorize('admin', 'scheduling_officer', 'program_manager'), createRoomValidation, createRoom);
 router.put('/:id', authorize('admin', 'scheduling_officer', 'program_manager'), updateRoom);
-router.delete('/:id', authorize('admin'), deleteRoom);
+router.delete('/:id', authorize('admin', 'scheduling_officer', 'program_manager'), deleteRoom);
 
 module.exports = router;

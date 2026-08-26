@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import { 
   Plus, Edit2, Trash2, Search, Sun, Moon, 
   Users, BookOpen, X, Check, GraduationCap,
-  Calendar, UserCheck, TrendingUp, Grid3x3, List
+  Calendar, UserCheck, TrendingUp, Grid3x3, List, RefreshCw, Copy
 } from 'lucide-react';
 
 const SectionPage = () => {
@@ -19,6 +19,7 @@ const SectionPage = () => {
   const [filterShift, setFilterShift] = useState('');
   const [filterYear, setFilterYear] = useState('');
   const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
+  const [regeneratingId, setRegeneratingId] = useState(null);
 
   const [formData, setFormData] = useState({
     program: 'BSIT',
@@ -151,6 +152,27 @@ const SectionPage = () => {
       adviser: '',
       description: ''
     });
+  };
+
+  const handleRegenerateCode = async (sectionId) => {
+    if (!window.confirm('Are you sure you want to regenerate the enrollment code? The old code will no longer work.')) return;
+    
+    try {
+      setRegeneratingId(sectionId);
+      await sectionAPI.regenerateEnrollmentCode(sectionId);
+      toast.success('Enrollment code regenerated successfully!');
+      loadSections();
+    } catch (error) {
+      console.error('Regenerate code error:', error);
+      toast.error(error.response?.data?.message || 'Failed to regenerate enrollment code');
+    } finally {
+      setRegeneratingId(null);
+    }
+  };
+
+  const handleCopyCode = (code) => {
+    navigator.clipboard.writeText(code);
+    toast.success('Enrollment code copied!');
   };
 
   const filteredSections = sections.filter(section => {
@@ -425,6 +447,39 @@ const SectionPage = () => {
                     <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">
                       {section.program} • Year {section.yearLevel}
                     </p>
+                    {/* Enrollment Code Badge */}
+                    {section.enrollmentCode ? (
+                      <div className="mt-2 flex items-center gap-2">
+                        <div className="bg-green-100 dark:bg-green-900 border border-green-300 dark:border-green-700 rounded-lg px-3 py-1.5">
+                          <p className="text-xs text-green-700 dark:text-green-300 font-medium">Enrollment Code:</p>
+                          <p className="text-lg font-bold text-green-900 dark:text-green-100 font-mono tracking-wider">{section.enrollmentCode}</p>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <button
+                            onClick={() => handleCopyCode(section.enrollmentCode)}
+                            className="p-2 text-green-600 hover:bg-green-50 dark:hover:bg-green-900 rounded-lg transition-colors"
+                            title="Copy Code"
+                          >
+                            <Copy className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleRegenerateCode(section._id)}
+                            disabled={regeneratingId === section._id}
+                            className="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
+                            title="Regenerate Code"
+                          >
+                            <RefreshCw className={`w-4 h-4 ${regeneratingId === section._id ? 'animate-spin' : ''}`} />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="mt-2 inline-block">
+                        <div className="bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5">
+                          <p className="text-xs text-gray-500 font-medium">Enrollment Code:</p>
+                          <p className="text-sm text-gray-400 italic">Not generated yet</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   
                   {/* Shift Badge */}
@@ -829,7 +884,7 @@ const SectionPage = () => {
                       {/* Adviser */}
                       <div>
                         <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                          Section Adviser
+                          Section Adviser <span className="text-gray-400 font-normal text-xs">(Optional)</span>
                         </label>
                         <select
                           value={formData.adviser}

@@ -12,6 +12,7 @@ const Subject = require('../models/Subject.model');
 const Faculty = require('../models/Faculty.model');
 const Room = require('../models/Room.model');
 const Schedule = require('../models/Schedule.model');
+const { recommendFacultyForSubject } = require('./gemini.service');
 
 /**
  * Generate schedule for a program and year level
@@ -25,7 +26,8 @@ async function generateScheduleForProgram(params) {
     program,
     yearLevel,
     section,  // Single section identifier (e.g., 'A', 'B', 'C')
-    shift = 'Day'  // Default to Day shift if not specified
+    shift = 'Day',  // Default to Day shift if not specified
+    useAIRecommendations = false  // Whether to use AI-powered faculty recommendations
   } = params;
 
   const results = {
@@ -76,10 +78,11 @@ async function generateScheduleForProgram(params) {
 
     for (const subject of subjects) {
         try {
-          // Find suitable faculty
-          const suitableFaculty = findSuitableFaculty(
+          // Find suitable faculty (with optional AI recommendations)
+          const suitableFaculty = await findSuitableFaculty(
             subject,
-            availableFaculty
+            availableFaculty,
+            useAIRecommendations
           );
 
           if (!suitableFaculty) {
@@ -202,6 +205,7 @@ async function generateScheduleForProgram(params) {
     return {
       success: true,
       message: 'Schedule generation completed',
+      aiUsed: useAIRecommendations,
       results
     };
 
@@ -211,8 +215,8 @@ async function generateScheduleForProgram(params) {
   }
 }
 
-// Helper: Find suitable faculty for a subject
-function findSuitableFaculty(subject, facultyList) {
+// Helper: Find suitable faculty for a subject (with optional AI recommendations)
+async function findSuitableFaculty(subject, facultyList, useAI = false) {
   // Filter faculty who:
   // 1. Have required qualifications
   // 2. Have available teaching load
@@ -232,10 +236,45 @@ function findSuitableFaculty(subject, facultyList) {
     return hasQualification && hasAvailableLoad;
   });
 
-  // Sort by current load (assign to faculty with lowest load first)
+  if (suitable.length === 0) {
+    return null;
+  }
+
+  // If AI recommendations are enabled, use AI scoring
+  if (useAI) {
+    try {
+      const aiRecommendations = await recommendFacultyForSubject(subject._id.toString());
+
+      if (aiRecommendations && aiRecommendations.length > 0) {
+        // Map AI scores to suitable faculty
+        const scoredFaculty = suitable.map(faculty => {
+          const aiRec = aiRecommendations.find(
+            rec => rec.faculty._id.toString() === faculty._id.toString()
+          );
+          return {
+            faculty,
+            aiScore: aiRec ? aiRec.score : 0,
+            percentage: aiRec ? aiRec.percentage : 0
+          };
+        });
+
+        // Sort by AI score (highest first)
+        scoredFaculty.sort((a, b) => b.aiScore - a.aiScore);
+        
+        console.log(`AI Recommendation for ${subject.subjectCode}: ${scoredFaculty[0].faculty.user.firstName} ${scoredFaculty[0].faculty.user.lastName} (${scoredFaculty[0].percentage}%)`);
+        
+        return scoredFaculty[0].faculty;
+      }
+    } catch (error) {
+      console.error('AI recommendation failed, falling back to standard selection:', error);
+      // Fall through to standard selection
+    }
+  }
+
+  // Standard selection: Sort by current load (assign to faculty with lowest load first)
   suitable.sort((a, b) => a.currentLoad - b.currentLoad);
 
-  return suitable[0] || null;
+  return suitable[0];
 }
 
 // Helper: Find suitable room for a subject
@@ -327,6 +366,208 @@ function timeToMinutes(timeStr) {
   return hours * 60 + minutes;
 }
 
+/**
+ * Preview schedule generation (doesn't save to database)
+ * @param {Object} params - Generation parameters
+ * @returns {Object} Preview of schedules to be created
+ */
+async function previewScheduleForProgram(params) {
+  const {
+    academicYear,
+    semester,
+    program,
+    yearLevel,
+    section,
+    shift = 'Day',
+    useAIRecommendations = false
+  } = params;
+
+  const preview = {
+    schedules: [],
+    failed: [],
+    conflicts: [],
+    statistics: {
+      totalSubjects: 0,
+      scheduledSubjects: 0,
+      failedSubjects: 0,
+      conflictsDetected: 0
+    }
+  };
+
+  try {
+    // Step 1: Get all subjects for this program/year/semester
+    const subjects = await Subject.find({
+      program,
+      yearLevel,
+      semester,
+      isActive: true
+    }).populate('prerequisites');
+
+    preview.statistics.totalSubjects = subjects.length;
+
+    if (subjects.length === 0) {
+      return {
+        success: false,
+        message: 'No subjects found for this program/year/semester',
+        preview
+      };
+    }
+
+    // Step 2: Get available faculty and rooms
+    const availableFaculty = await Faculty.find({ isActive: true })
+      .populate('user', 'firstName lastName');
+    
+    const availableRooms = await Room.find({ isActive: true });
+
+    // Step 3: Define time slots
+    const timeSlots = generateTimeSlots();
+
+    // Step 4: Generate preview for the specified section
+    const sectionCode = `${program}-${yearLevel}${section}-${semester}-${academicYear}`;
+
+    let dayIndex = 0;
+    let slotIndex = 0;
+
+    for (const subject of subjects) {
+      try {
+        // Find suitable faculty (with optional AI recommendations)
+        const suitableFaculty = await findSuitableFaculty(
+          subject,
+          availableFaculty,
+          useAIRecommendations
+        );
+
+        if (!suitableFaculty) {
+          preview.failed.push({
+            subject: subject.subjectCode,
+            subjectName: subject.subjectName,
+            reason: 'No suitable faculty found'
+          });
+          preview.statistics.failedSubjects++;
+          continue;
+        }
+
+        // Find suitable room
+        const suitableRoom = findSuitableRoom(
+          subject,
+          availableRooms
+        );
+
+        if (!suitableRoom) {
+          preview.failed.push({
+            subject: subject.subjectCode,
+            subjectName: subject.subjectName,
+            reason: 'No suitable room found'
+          });
+          preview.statistics.failedSubjects++;
+          continue;
+        }
+
+        // Calculate required time slots based on lecture + lab hours
+        const totalHours = subject.lectureHours + subject.labHours;
+        const slotsNeeded = Math.ceil(totalHours / 1.5);
+
+        // Assign time slots
+        const assignedSlots = [];
+        for (let i = 0; i < slotsNeeded; i++) {
+          if (slotIndex >= timeSlots.length) {
+            dayIndex++;
+            slotIndex = 0;
+          }
+
+          if (dayIndex >= 6) {
+            preview.failed.push({
+              subject: subject.subjectCode,
+              subjectName: subject.subjectName,
+              reason: 'Not enough time slots available'
+            });
+            break;
+          }
+
+          const slot = timeSlots[slotIndex];
+          assignedSlots.push({
+            day: getDayName(dayIndex),
+            startTime: slot.startTime,
+            endTime: slot.endTime
+          });
+
+          slotIndex++;
+        }
+
+        if (assignedSlots.length < slotsNeeded) {
+          preview.statistics.failedSubjects++;
+          continue;
+        }
+
+        // Create schedule preview object
+        const schedulePreview = {
+          academicYear,
+          semester,
+          program,
+          yearLevel,
+          section: section,
+          sectionCode,
+          shift,
+          subject: subject._id,
+          faculty: suitableFaculty._id,
+          room: suitableRoom.roomCode,
+          timeSlots: assignedSlots,
+          maxStudents: suitableRoom.capacity,
+          status: 'draft',
+          isActive: true,
+          generatedBy: 'constraint_solver',
+          // Preview metadata for display
+          metadata: {
+            subjectCode: subject.subjectCode,
+            subjectName: subject.subjectName,
+            units: subject.units,
+            facultyName: `${suitableFaculty.user.firstName} ${suitableFaculty.user.lastName}`,
+            facultyId: suitableFaculty.employeeId,
+            roomName: suitableRoom.roomName,
+            roomCapacity: suitableRoom.capacity
+          }
+        };
+
+        // Check for conflicts (theoretical check, not against DB)
+        const hasConflict = await checkConflictsBeforeCreation(schedulePreview);
+        
+        if (hasConflict) {
+          preview.conflicts.push({
+            subject: subject.subjectCode,
+            subjectName: subject.subjectName,
+            reason: 'Time slot conflict detected'
+          });
+          preview.statistics.conflictsDetected++;
+          continue;
+        }
+
+        preview.schedules.push(schedulePreview);
+        preview.statistics.scheduledSubjects++;
+
+      } catch (error) {
+        preview.failed.push({
+          subject: subject.subjectCode,
+          subjectName: subject.subjectName,
+          reason: error.message
+        });
+        preview.statistics.failedSubjects++;
+      }
+    }
+
+    return {
+      success: true,
+      message: 'Schedule preview generated successfully',
+      aiUsed: useAIRecommendations,
+      preview
+    };
+
+  } catch (error) {
+    console.error('Schedule preview error:', error);
+    throw error;
+  }
+}
+
 module.exports = {
-  generateScheduleForProgram
+  generateScheduleForProgram,
+  previewScheduleForProgram
 };

@@ -9,6 +9,7 @@ const FacultyModal = ({ mode, faculty, onClose }) => {
   const [formData, setFormData] = useState({
     user: '',
     employeeId: '',
+    employmentType: 'Regular',
     specialization: [''],
     maxLoad: 40,
     isActive: true
@@ -20,6 +21,7 @@ const FacultyModal = ({ mode, faculty, onClose }) => {
       setFormData({
         user: faculty.user?._id || '',
         employeeId: faculty.employeeId || '',
+        employmentType: faculty.employmentType || 'Regular',
         specialization: faculty.specialization || [''],
         maxLoad: faculty.maxLoad || 40,
         isActive: faculty.isActive !== false
@@ -27,13 +29,13 @@ const FacultyModal = ({ mode, faculty, onClose }) => {
     }
   }, [mode, faculty]);
 
-  // Disable body scroll when modal is open
-  useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = 'unset';
-    };
-  }, []);
+  // // Disable body scroll when modal is open
+  // useEffect(() => {
+  //   document.body.style.overflow = 'hidden';
+  //   return () => {
+  //     document.body.style.overflow = 'unset';
+  //   };
+  // }, []);
 
   const loadUsers = async () => {
     try {
@@ -106,9 +108,9 @@ const FacultyModal = ({ mode, faculty, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] animate-fadeIn flex items-start justify-center p-4 pt-8 overflow-y-auto">
       {/* Modal Container */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-4xl w-full max-h-[85vh] flex flex-col shadow-2xl">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl relative z-[10000] animate-slideUp">
         {/* Header - Sticky */}
         <div className="bg-teal-600 text-white px-6 py-5 rounded-t-2xl flex items-center justify-between flex-shrink-0 shadow-lg">
           <div className="flex items-center gap-3">
@@ -154,6 +156,13 @@ const FacultyModal = ({ mode, faculty, onClose }) => {
                     </span>
                     <span className="px-2.5 py-1 bg-teal-600 text-white text-xs font-bold rounded">
                       {faculty.employeeId}
+                    </span>
+                    <span className={`px-2.5 py-1 text-xs font-semibold rounded ${
+                      faculty.employmentType === 'Regular'
+                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                        : 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300'
+                    }`}>
+                      {faculty.employmentType || 'Regular'}
                     </span>
                     <span className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${
                       faculty.isActive 
@@ -224,6 +233,23 @@ const FacultyModal = ({ mode, faculty, onClose }) => {
                     placeholder="e.g., FAC-2024-001"
                     className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 dark:bg-gray-700 dark:text-white placeholder-gray-400 transition-all"
                   />
+                </div>
+
+                {/* Employment Type */}
+                <div className="mt-4">
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                    Employment Type <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    name="employmentType"
+                    value={formData.employmentType}
+                    onChange={handleChange}
+                    required
+                    className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 dark:bg-gray-700 dark:text-white transition-all appearance-none bg-white dark:bg-gray-700"
+                  >
+                    <option value="Regular">Regular Instructor</option>
+                    <option value="Part-time">Part-time Instructor</option>
+                  </select>
                 </div>
               </div>
 

@@ -94,6 +94,7 @@ app.use('/api/students', require('./routes/student.routes'));
 app.use('/api/sections', require('./routes/section.routes'));
 app.use('/api/activity-logs', require('./routes/activityLog.routes'));
 app.use('/api/ai', require('./routes/ai.routes'));
+app.use('/api/ai', require('./routes/aiChat.routes'));
 app.use('/api/import', require('./routes/import.routes'));
 
 // Health check endpoint
@@ -134,7 +135,7 @@ app.listen(PORT, () => {
   console.log(`🚀 Port:        ${PORT}`);
   console.log(`🌐 API:         http://localhost:${PORT}/api`);
   console.log(`💚 Health:      http://localhost:${PORT}/api/health`);
-  console.log(`📊 Endpoints:   87 API endpoints active`);
+  console.log(`📊 Endpoints:   91 API endpoints active`);
   console.log('═'.repeat(60) + '\n');
   console.log('✓ Server is ready to handle requests');
   console.log('✓ Press Ctrl+C to stop\n');

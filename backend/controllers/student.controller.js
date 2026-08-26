@@ -189,7 +189,8 @@ exports.updateStudent = async (req, res) => {
     
     const allowedUpdates = [
       'program', 'yearLevel', 'section', 'studentType', 'academicYear', 'semester',
-      'contactNumber', 'address', 'guardianInfo', 'emergencyContact', 'enrollmentStatus', 'gpa', 'notes'
+      'contactNumber', 'address', 'guardianInfo', 'emergencyContact', 'enrollmentStatus', 'gpa', 'notes',
+      'sectionCode', 'subjectCodes'
     ];
     
     allowedUpdates.forEach(field => {
@@ -426,6 +427,54 @@ exports.getStats = async (req, res) => {
     });
   } catch (error) {
     console.error('Get stats error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+};
+
+// @desc    Assign section code to student
+// @route   PUT /api/students/:id/assign-section
+// @access  Private (Admin, Scheduling Officer, Program Manager)
+exports.assignSectionCode = async (req, res) => {
+  try {
+    const { sectionCode, studentType } = req.body;
+    
+    if (!sectionCode) {
+      return res.status(400).json({
+        success: false,
+        message: 'Section code is required'
+      });
+    }
+    
+    const student = await Student.findById(req.params.id);
+    
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found'
+      });
+    }
+    
+    // Update student with section code
+    student.sectionCode = sectionCode.toUpperCase();
+    student.studentType = studentType || student.studentType;
+    student.enrollmentStatus = 'enrolled'; // Mark as enrolled when section is assigned
+    
+    await student.save();
+    
+    const updatedStudent = await Student.findById(student._id)
+      .populate('user', '-password');
+    
+    res.status(200).json({
+      success: true,
+      message: 'Section code assigned successfully',
+      data: updatedStudent
+    });
+  } catch (error) {
+    console.error('Assign section code error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error',

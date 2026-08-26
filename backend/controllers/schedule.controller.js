@@ -739,7 +739,8 @@ exports.generateSchedule = async (req, res) => {
       section,            // Single section identifier (e.g., 'A', 'B', 'C')
       method = 'greedy',  // 'greedy' or 'ortools'
       shift = 'Day',      // 'Day' or 'Night'
-      timeLimit = 60      // seconds for OR-Tools
+      timeLimit = 60,     // seconds for OR-Tools
+      useAIRecommendations = false  // Use AI RAG for faculty recommendations
     } = req.body;
 
     if (!academicYear || !semester || !program || !yearLevel || !section) {
@@ -806,7 +807,9 @@ exports.generateSchedule = async (req, res) => {
         semester,
         program,
         yearLevel,
-        section
+        section,
+        shift,
+        useAIRecommendations: useAIRecommendations === true || useAIRecommendations === 'true'
       });
     }
 
@@ -814,6 +817,7 @@ exports.generateSchedule = async (req, res) => {
       success: result.success,
       message: result.message || (result.success ? 'Schedule generated successfully' : 'Schedule generation failed'),
       method: method === 'ortools' ? 'Google OR-Tools CP-SAT' : 'Greedy Algorithm',
+      aiUsed: result.aiUsed || false,
       data: result
     });
 
@@ -822,6 +826,142 @@ exports.generateSchedule = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error generating schedule',
+      error: error.message
+    });
+  }
+};
+
+// @desc    Preview schedule generation (doesn't save to DB)
+// @route   POST /api/schedules/preview
+// @access  Private/Admin
+exports.previewSchedule = async (req, res) => {
+  try {
+    const { 
+      academicYear, 
+      semester, 
+      program, 
+      yearLevel, 
+      section,
+      method = 'greedy',
+      shift = 'Day',
+      timeLimit = 60,
+      useAIRecommendations = false
+    } = req.body;
+
+    if (!academicYear || !semester || !program || !yearLevel || !section) {
+      return res.status(400).json({
+        success: false,
+        message: 'Academic year, semester, program, year level, and section are required'
+      });
+    }
+
+    let preview;
+
+    // Choose generation method
+    if (method === 'ortools') {
+      // OR-Tools preview not yet implemented, fall back to greedy for preview
+      console.log('OR-Tools preview requested, falling back to greedy algorithm for preview');
+      const { previewScheduleForProgram } = require('../services/scheduleGenerator.service');
+
+      preview = await previewScheduleForProgram({
+        academicYear,
+        semester,
+        program,
+        yearLevel,
+        section,
+        shift,
+        useAIRecommendations: useAIRecommendations === true || useAIRecommendations === 'true'
+      });
+      
+      // Override method name for display
+      preview.methodNote = 'Preview generated using Greedy Algorithm (OR-Tools preview not yet implemented)';
+    } else {
+      // Use greedy algorithm - preview only
+      const { previewScheduleForProgram } = require('../services/scheduleGenerator.service');
+
+      preview = await previewScheduleForProgram({
+        academicYear,
+        semester,
+        program,
+        yearLevel,
+        section,
+        shift,
+        useAIRecommendations: useAIRecommendations === true || useAIRecommendations === 'true'
+      });
+    }
+
+    res.status(200).json({
+      success: preview.success,
+      message: preview.message || (preview.success ? 'Schedule preview generated successfully' : 'Schedule preview generation failed'),
+      method: method === 'ortools' ? 'Google OR-Tools CP-SAT' : 'Greedy Algorithm',
+      aiUsed: preview.aiUsed || false,
+      data: preview
+    });
+
+  } catch (error) {
+    console.error('Preview schedule error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error previewing schedule',
+      error: error.message
+    });
+  }
+};
+
+// @desc    Save previewed schedules to database
+// @route   POST /api/schedules/save-preview
+// @access  Private/Admin
+exports.savePreviewedSchedules = async (req, res) => {
+  try {
+    const { schedules } = req.body;
+
+    if (!schedules || !Array.isArray(schedules) || schedules.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No schedules provided to save'
+      });
+    }
+
+    const savedSchedules = [];
+    const errors = [];
+
+    for (const scheduleData of schedules) {
+      try {
+        // Create schedule in database
+        const schedule = await Schedule.create(scheduleData);
+        savedSchedules.push(schedule);
+
+        // Update faculty load
+        if (scheduleData.faculty) {
+          const subject = await Subject.findById(scheduleData.subject);
+          if (subject) {
+            await Faculty.findByIdAndUpdate(scheduleData.faculty, {
+              $inc: { currentLoad: subject.units }
+            });
+          }
+        }
+      } catch (error) {
+        errors.push({
+          subject: scheduleData.metadata?.subjectCode || 'Unknown',
+          error: error.message
+        });
+      }
+    }
+
+    res.status(201).json({
+      success: true,
+      message: `Successfully saved ${savedSchedules.length} schedule(s)`,
+      saved: savedSchedules.length,
+      failed: errors.length,
+      data: savedSchedules,
+      errors: errors
+    });
+
+  } catch (error) {
+    console.error('Save previewed schedules error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error saving schedules',
       error: error.message
     });
   }

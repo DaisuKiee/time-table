@@ -8,7 +8,8 @@ const {
   updateStudent,
   deleteStudent,
   bulkImport,
-  getStats
+  getStats,
+  assignSectionCode
 } = require('../controllers/student.controller');
 const { protect, authorize } = require('../middleware/auth.middleware');
 const { checkProgramAccess } = require('../middleware/programAccess.middleware');
@@ -37,6 +38,9 @@ router.post('/bulk-import', protect, authorize('admin', 'scheduling_officer', 'p
 router.route('/')
   .get(protect, authorize('admin', 'scheduling_officer', 'program_manager', 'faculty'), checkProgramAccess('Student'), getAllStudents)
   .post(protect, authorize('admin', 'scheduling_officer', 'program_manager'), checkProgramAccess('Student'), createStudent);
+
+// Assign section code route
+router.put('/:id/assign-section', protect, authorize('admin', 'scheduling_officer', 'program_manager'), checkProgramAccess('Student'), assignSectionCode);
 
 router.route('/:id')
   .get(protect, getStudentById)
