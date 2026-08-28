@@ -146,11 +146,23 @@ export const roomAPI = {
   getStats: () => api.get('/rooms/stats')
 };
 
+// ============== PROGRAM ENDPOINTS ==============
+export const programAPI = {
+  getAll: (params) => api.get('/programs', { params }),
+  getById: (id) => api.get(`/programs/${id}`),
+  create: (data) => api.post('/programs', data),
+  update: (id, data) => api.put(`/programs/${id}`, data),
+  delete: (id) => api.delete(`/programs/${id}`)
+};
+
 // ============== SCHEDULE ENDPOINTS ==============
 export const scheduleAPI = {
   getAll: (params) => api.get('/schedules', { params }),
   getById: (id) => api.get(`/schedules/${id}`),
   create: (data) => api.post('/schedules', data),
+  // Validates the whole batch and writes all-or-nothing, so a partial failure
+  // can't leave some rows saved while the client still holds them as pending.
+  bulkCreate: (schedules) => api.post('/schedules/bulk', { schedules }),
   update: (id, data) => api.put(`/schedules/${id}`, data),
   delete: (id) => api.delete(`/schedules/${id}`),
   getByProgramAndYear: (program, year, params) => 
@@ -197,31 +209,40 @@ export const importAPI = {
 export const classSpaceAPI = {
   getAll: (params) => api.get('/classSpaces', { params }),
   getById: (id) => api.get(`/classSpaces/${id}`),
-  getByCode: (code) => api.get(`/classSpaces/code/${code}`),
   getMyClasses: () => api.get('/classSpaces/my-classes'),
   create: (data) => api.post('/classSpaces', data),
   update: (id, data) => api.put(`/classSpaces/${id}`, data),
   delete: (id) => api.delete(`/classSpaces/${id}`),
-  
+  regenerateClassCode: (id) => api.put(`/classSpaces/${id}/regenerate-code`),
+
   // Announcements
   postAnnouncement: (id, data) => api.post(`/classSpaces/${id}/announcements`, data),
-  updateAnnouncement: (id, announcementId, data) => 
+  updateAnnouncement: (id, announcementId, data) =>
     api.put(`/classSpaces/${id}/announcements/${announcementId}`, data),
-  deleteAnnouncement: (id, announcementId) => 
+  deleteAnnouncement: (id, announcementId) =>
     api.delete(`/classSpaces/${id}/announcements/${announcementId}`),
-  
+
   // Materials
-  uploadMaterial: (id, formData) => 
+  uploadMaterial: (id, formData) =>
     api.post(`/classSpaces/${id}/materials`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     }),
-  deleteMaterial: (id, materialId) => 
+  deleteMaterial: (id, materialId) =>
     api.delete(`/classSpaces/${id}/materials/${materialId}`),
-  
-  // Enrollment
-  enroll: (id, data) => api.post(`/classSpaces/${id}/enroll`, data),
-  unenroll: (id) => api.post(`/classSpaces/${id}/unenroll`),
-  enrollByCode: (enrollmentCode) => api.post('/classSpaces/enroll-by-code', { enrollmentCode })
+
+  // Enrollment.
+  // Regular students pass a SECTION enrollment code; irregular students pass a
+  // SUBJECT class code. The backend routes on the student's studentType.
+  join: (code) => api.post('/classSpaces/join', { code }),
+  leave: (id) => api.post(`/classSpaces/${id}/leave`)
+};
+
+/** Absolute URL for an uploaded material. */
+export const resolveUploadUrl = (fileUrl) => {
+  if (!fileUrl) return '';
+  if (/^https?:\/\//i.test(fileUrl)) return fileUrl;
+  // API_URL ends with /api; uploads are served from the server root.
+  return `${API_URL.replace(/\/api\/?$/, '')}${fileUrl}`;
 };
 
 // ============== SECTION ENDPOINTS ==============

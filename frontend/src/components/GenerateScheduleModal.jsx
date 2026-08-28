@@ -3,7 +3,6 @@ import { scheduleAPI, sectionAPI } from '../services/api';
 import toast from 'react-hot-toast';
 import { X, Wand2, Loader, CheckCircle, AlertTriangle, Calendar, Sparkles } from 'lucide-react';
 
-const PROGRAMS = ['BSIT', 'BSHM', 'BIT-ET', 'BIT-CT', 'BIT-AT', 'BSFI', 'BSIE'];
 const YEAR_LEVELS = [1, 2, 3, 4];
 const SEMESTERS = [1, 2];
 
